@@ -1,0 +1,1 @@
+# Lateral Synthesis MCP - Modules

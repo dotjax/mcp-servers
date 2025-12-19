@@ -1,0 +1,10 @@
+divergence:
+  method: random
+  count: 5                # Number of divergent concepts to generate
+
+persistence:
+  enabled: true
+
+limits:
+  max_origin_chars: 1000
+  max_insight_chars: 2000

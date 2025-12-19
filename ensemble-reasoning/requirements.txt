@@ -1,0 +1,5 @@
+# Ensemble Reasoning MCP Server
+# Python dependencies
+
+# MCP framework
+mcp>=1.6.0
