@@ -1,29 +1,31 @@
-# mcp
+# MCP Servers
 
-This repository contains two local MCP servers:
+Two local Model Context Protocol (MCP) servers:
 
-- **ensemble-reasoning**: a collaborative multi-lens reasoning framework (analytical/skeptical/creative/pragmatic/ethical) with synthesis and convergence mapping.
-- **lateral-synthesis**: a divergent thinking tool that injects random concepts to force novel connections (Origin → Divergence → Synthesis).
+- Ensemble Reasoning: a collaborative, multi‑lens reasoning framework (analytical, skeptical, creative, pragmatic, ethical) with synthesis and convergence mapping.
+- Lateral Synthesis: a divergent‑thinking tool that injects random concepts to provoke novel connections (Origin → Divergence → Synthesis).
 
-## Repo layout
+## Repository Structure
 
 - `ensemble-reasoning/` — Ensemble Reasoning MCP server
 - `lateral-synthesis/` — Lateral Synthesis MCP server
-- `_logs/` — runtime log output (ignored by git)
+- `_logs/` — runtime logs (ignored by Git)
 
 ## Requirements
 
 - Python 3.10+
-- `mcp` Python package (see each server’s `requirements.txt`)
+- `mcp` Python package (installed via each server’s `requirements.txt`)
 
-Install dependencies (global environment):
+## Setup
+
+Install dependencies (you may prefer a virtual environment):
 
 ```bash
 pip install -r ensemble-reasoning/requirements.txt
 pip install -r lateral-synthesis/requirements.txt
 ```
 
-## Running the servers
+## Run
 
 Ensemble Reasoning:
 
@@ -39,25 +41,16 @@ python lateral-synthesis/server.py
 
 ## Logging
 
-Both servers default to **DEBUG** logging and write:
+The `_logs/` directory is ignored via `.gitignore`. Both servers default with DEBUG to write console logs (terminal output) and JSON Lines files under `_logs/`, for example:
 
-- Console logs (useful for VS Code OUTPUT / terminal)
-- JSONL logs per run under `_logs/`:
-  - `_logs/ensemble-reasoning-YYYYMMDDTHHMMSS.jsonl`
-  - `_logs/lateral-synthesis-YYYYMMDDTHHMMSS.jsonl`
+- `_logs/ensemble-reasoning-YYYYMMDDTHHMMSS.jsonl`
+- `_logs/lateral-synthesis-YYYYMMDDTHHMMSS.jsonl`
 
-`_logs/` is ignored via `.gitignore`.
+### Configure Verbosity
 
-### Tuning verbosity
+Set `MCP_LOG_LEVEL` (e.g., `INFO`). Examples:
 
-- Ensemble Reasoning: `ENSEMBLE_LOG_LEVEL=INFO`
-- Lateral Synthesis: `MCP_LOG_LEVEL=INFO`
-
-Example:
-
-```bash
-ENSEMBLE_LOG_LEVEL=INFO python ensemble-reasoning/server.py
-MCP_LOG_LEVEL=INFO python lateral-synthesis/server.py
-```
+- `MCP_LOG_LEVEL=INFO python ensemble-reasoning/server.py`
+- `MCP_LOG_LEVEL=INFO python lateral-synthesis/server.py`
 
  

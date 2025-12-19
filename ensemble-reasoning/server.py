@@ -242,7 +242,7 @@ async def main():
     os.makedirs(log_dir, exist_ok=True)
 
     # Configure logging: console (stderr) + JSON file, default DEBUG
-    log_level = os.getenv("ENSEMBLE_LOG_LEVEL", "DEBUG").upper()
+    log_level = os.getenv("MCP_LOG_LEVEL", "DEBUG").upper()
 
     class JsonFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
