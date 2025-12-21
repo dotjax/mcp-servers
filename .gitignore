@@ -66,3 +66,4 @@ _logs/
 .DS_Store
 Thumbs.db
 lateral-synthesis/_cache/
+benchmarks/
