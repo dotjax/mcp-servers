@@ -10,13 +10,35 @@ Collaborative reasoning with multiple agent lenses, cross-endorsement/challenge,
 - `pragmatic`
 - `ethical`
 
-## Installation
+## Install
 
 ```bash
-pip install -r requirements.txt
+pip install -r ../requirements.txt  # all servers
+# or
+pip install -r requirements.txt     # this server only
 ```
 
-## Usage
+## Run
+
+```bash
+python server.py
+```
+
+`MCP_LOG_LEVEL` controls verbosity (default DEBUG). Logs stream to stderr and `_logs/ensemble-reasoning-*.jsonl`.
+
+## Config
+
+Config file: `config.yaml`
+
+- `max_thoughts_per_session` (default `1000`)
+- `max_endorsements_per_thought` (default `100`)
+- `max_thoughts_per_agent_per_session` (default `50`)
+- `default_synthesis_threshold` (default `0.6`)
+- `positive_endorsement_threshold` (default `0.5`)
+- `negative_endorsement_threshold` (default `-0.5`)
+- Metrics and rate limiting toggles mirror the environment variables listed below.
+
+Environment overrides include `MCP_LOG_LEVEL`, `MCP_ENABLE_METRICS`, `MCP_PROMETHEUS`, `MCP_RATE_LIMIT_OPS`, and related variables documented in the Metrics section.
 
 ## Response Format (JSON)
 

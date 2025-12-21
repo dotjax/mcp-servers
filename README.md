@@ -14,11 +14,18 @@ Two local Model Context Protocol (MCP) servers:
 ## Requirements
 
 - Python 3.10+
-- `mcp` Python package (installed via each server’s `requirements.txt`)
+- Install shared deps from the repo root: `pip install -r requirements.txt`
+- Each server also ships its own `requirements.txt` if you want to install only one server
 
 ## Setup
 
-Install dependencies (you may prefer a virtual environment):
+Install everything (recommended):
+
+```bash
+pip install -r requirements.txt
+```
+
+Install a single server only:
 
 ```bash
 pip install -r ensemble-reasoning/requirements.txt
@@ -38,6 +45,8 @@ Lateral Synthesis:
 ```bash
 python lateral-synthesis/server.py
 ```
+
+See [ensemble-reasoning/README.md](ensemble-reasoning/README.md) and [lateral-synthesis/README.md](lateral-synthesis/README.md) for tool details, configs, and environment variables.
 
 ## Logging
 

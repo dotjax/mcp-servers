@@ -1,0 +1,5 @@
+# Shared dependencies for all MCP servers in this repo
+mcp>=1.6.0
+pyyaml>=6.0
+python-dotenv>=1.0
+wonderwords>=2.2.0
