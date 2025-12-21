@@ -28,7 +28,7 @@ from mcp.types import Tool, TextContent, Icon
 from utils import setup_logging
 
 # Import models and helpers from the `modules` package
-from modules.models import AGENT_LENSES, stop_metrics_exporter, stop_prometheus_server
+from modules.models import AGENT_LENSES
 
 # Tool implementations
 from modules.tools import (
@@ -39,7 +39,6 @@ from modules.tools import (
     tool_propose_integration,
     tool_convergence_map,
     tool_get_active_session,
-    tool_get_metrics,
     tool_get_rate_status,
     tool_reset_agent_rate,
 )
@@ -75,8 +74,7 @@ TOOL_HANDLERS = {
     "get_convergence_map": tool_convergence_map,
     "get_active_session": tool_get_active_session,
     "get_metrics": tool_get_metrics,
-    "get_rate_status": tool_get_rate_status,
-    "reset_agent_rate": tool_reset_agent_rate,
+    "get_t_agent_rate": tool_reset_agent_rate,
 }
 
 
@@ -197,14 +195,6 @@ async def handle_list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_metrics",
-            description="Get lightweight runtime metrics: counters and average latencies.",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
-        ),
-        Tool(
-            name="get_rate_status",
             description="Get per-agent rate limiter status (current op count in sliding window).",
             inputSchema={
                 "type": "object",
@@ -285,3 +275,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+pass

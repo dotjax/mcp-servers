@@ -65,3 +65,4 @@ _logs/
 # MacOS / system
 .DS_Store
 Thumbs.db
+lateral-synthesis/_cache/

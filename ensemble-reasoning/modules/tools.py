@@ -48,11 +48,7 @@ async def tool_start_collaborative(args: dict) -> list[TextContent]:
     session = models.EnsembleSession(session_id, problem, agent_lenses)
     models.active_sessions[session_id] = session
     models.current_session_id = session_id
-    models.save_session_snapshot(session, "start")
-
-    # Start metrics exporter / Prometheus endpoint if configured
-    models.ensure_metrics_exporter_started()
-    models.ensure_prometheus_server_started()
+    models.log_session_event(session, "start", {"problem": problem, "agent_lenses": agent_lenses})
 
     if models.CONSOLE_OUTPUT:
         print(f"\n[mcp] started ensemble session with {len(agent_lenses)} agents", file=sys.stderr)
@@ -105,9 +101,7 @@ async def tool_contribute(args: dict) -> list[TextContent]:
     thought_id = session.add_thought(thought)
     # record operation for rate limiting
     models.record_agent_op(session.session_id, agent_lens)
-    models.inc_counter("contribute_calls")
-    models.record_latency("contribute", time.perf_counter() - start)
-    models.save_session_snapshot(session, "contribute")
+    models.log_session_event(session, "contribute", {"thought": thought.to_dict()})
 
     if models.CONSOLE_OUTPUT:
         print(f"\n[mcp] [{agent_lens}] thought #{thought_id}", file=sys.stderr)
@@ -166,12 +160,13 @@ async def tool_endorse_challenge(args: dict) -> list[TextContent]:
         tag = "endorse" if endorsement_level > 0.3 else "challenge" if endorsement_level < -0.3 else "neutral"
         print(f"\n[mcp] [{agent_lens}] {tag} thought #{thought_id}: {endorsement_level:+.2f}", file=sys.stderr)
 
-    models.inc_counter("endorse_calls")
-    models.record_latency("endorse", time.perf_counter() - start)
-
-    # record operation for rate limiting
     models.record_agent_op(session.session_id, agent_lens)
-    models.save_session_snapshot(session, "endorse_or_challenge")
+    models.log_session_event(session, "endorse_challenge", {
+        "thought_id": thought_id,
+        "agent_lens": agent_lens,
+        "endorsement_level": endorsement_level,
+        "note": note
+    })
 
     return _ok(
         thoughtId=thought_id,
@@ -211,9 +206,7 @@ async def tool_synthesize(args: dict) -> list[TextContent]:
             f"\n[mcp] synthesis: convergence={convergence:.2f} consensus={len(consensus['consensus_thoughts'])} tensions={len(tensions)}",
             file=sys.stderr,
         )
-    models.inc_counter("synthesize_calls")
-    models.record_latency("synthesize", time.perf_counter() - start)
-    models.save_session_snapshot(session, "synthesize")
+    models.log_session_event(session, "synthesize", {"convergence_score": score, "tensions": tensions})
 
     return _ok(**synthesis)
 
@@ -270,7 +263,7 @@ async def tool_propose_integration(args: dict) -> list[TextContent]:
     proposal_id = session.add_integration(proposal)
     # record operation for rate limiting
     models.record_agent_op(session.session_id, agent_lens)
-    models.save_session_snapshot(session, "propose_integration")
+    models.log_session_event(session, "propose_integration", {"proposal": proposal.to_dict()})
     if models.CONSOLE_OUTPUT:
         print(f"\n[mcp] [{agent_lens}] proposes integration #{proposal_id}", file=sys.stderr)
         print(f"[mcp] reconciles: {reconciles}", file=sys.stderr)

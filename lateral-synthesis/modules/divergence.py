@@ -51,43 +51,61 @@ class RandomStrategy(DivergenceStrategy):
     """Generate random words with no relation to origin."""
     
     def __init__(self):
+        self._words = []
+        self._source = "unknown"
+        
+        # 1. Try wonderwords (optional)
         try:
             from wonderwords import RandomWord
             self._rw = RandomWord()
-            self._available = True
+            self._source = "wonderwords"
         except ImportError:
-            logger.warning("wonderwords not installed, using fallback word list")
             self._rw = None
-            self._available = False
-            self._fallback_words = self._load_fallback_words()
-    
-    def _load_fallback_words(self) -> list[str]:
-        """Load fallback word list from concepts.json."""
+            
+        # 2. Load concepts.json (primary fallback)
+        self._fallback_words = self._load_concepts_file()
+        
+        # If wonderwords failed, we rely on the file
+        if not self._rw:
+            self._words = self._fallback_words
+            self._source = "concepts.json"
+            
+        # 3. Panic fallback (if file missing/empty and no wonderwords)
+        if not self._rw and not self._words:
+            self._words = ["entropy", "prism", "cascade", "horizon", "symmetry"]
+            self._source = "panic_fallback"
+            logger.warning("Using panic fallback word list (concepts.json missing/empty)")
+
+    def _load_concepts_file(self) -> list[str]:
+        """Load word list from concepts.json."""
         try:
+            if not CONCEPTS_FILE.exists():
+                logger.warning(f"concepts.json not found at {CONCEPTS_FILE}")
+                return []
+                
             with open(CONCEPTS_FILE) as f:
                 data = json.load(f)
+            
             fallback = data.get("fallback_words", {})
             words = []
             for category in ["nouns", "verbs", "adjectives", "abstract"]:
                 words.extend(fallback.get(category, []))
-            if words:
-                return words
+            return words
         except Exception as e:
             logger.warning(f"Failed to load concepts.json: {e}")
-        # Hardcoded minimal fallback if file missing
-        return ["entropy", "prism", "cascade", "horizon", "symmetry"]
+            return []
     
     @property
     def name(self) -> str:
-        return "random"
+        return f"random ({self._source})"
     
     def generate(self, origin: str, count: int) -> list[str]:
-        """Generate random words, ignoring the origin entirely."""
-        logger.debug(f"Generating {count} random divergent concepts (origin ignored)")
+        """Generate random words (true randomness)."""
+        logger.debug(f"Generating {count} random divergent concepts for origin: {origin[:20]}...")
         
-        if self._available and self._rw:
+        # Use wonderwords if available
+        if self._rw:
             concepts = []
-            # Mix of word types for variety
             word_types = ["noun", "verb", "adjective"]
             for i in range(count):
                 word_type = word_types[i % len(word_types)]
@@ -100,13 +118,18 @@ class RandomStrategy(DivergenceStrategy):
                         word = self._rw.word(include_parts_of_speech=["adjectives"])
                     concepts.append(word)
                 except Exception:
-                    # Fallback if specific POS fails
-                    concepts.append(self._rw.word())
+                    # Fallback to list if wonderwords fails for some reason
+                    if self._fallback_words:
+                        concepts.append(random.choice(self._fallback_words))
+                    else:
+                        concepts.append("unknown")
             return concepts
-        # Use fallback list
-        if count <= len(self._fallback_words):
-            return random.sample(self._fallback_words, count)
-        return random.choices(self._fallback_words, k=count)
+            
+        # Otherwise use loaded list (concepts.json or panic fallback)
+        if not self._words:
+             return ["error"] * count # Should be covered by panic fallback in init
+             
+        return [random.choice(self._words) for _ in range(count)]
 
 
 # -----------------------------------------------------------------------------

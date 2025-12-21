@@ -252,44 +252,21 @@ class EnsembleSession:
 active_sessions: dict[str, EnsembleSession] = {}
 current_session_id: Optional[str] = None
 
-# Lightweight runtime metrics (in-memory)
-_MAX_LATENCY_SAMPLES = 1000
-_metrics_lock = threading.Lock()
-METRICS: dict = {
-    "counters": defaultdict(int),
-    "latencies": defaultdict(list),
-}
-
-
-def inc_counter(counter_name: str, delta: int = 1) -> None:
-    """Thread-safe counter increment for in-memory metrics."""
-    if not CONFIG.enable_metrics:
-        return
-    with _metrics_lock:
-        METRICS["counters"][counter_name] += int(delta)
-    logger.debug("counter %s += %s -> %s", counter_name, delta, METRICS["counters"][counter_name])
-
-
-def record_latency(op_name: str, duration: float) -> None:
-    """Record a latency sample, capping to _MAX_LATENCY_SAMPLES."""
-    if not CONFIG.enable_metrics:
-        return
-    with _metrics_lock:
-        lat = METRICS["latencies"][op_name]
-        lat.append(duration)
-        if len(lat) > _MAX_LATENCY_SAMPLES:
-            del lat[:len(lat) - _MAX_LATENCY_SAMPLES]
-    logger.debug("latency %s add %.4f samples=%s", op_name, duration, len(METRICS["latencies"][op_name]))
-
 # Per-agent recent operation timestamps for rate limiting (scoped per session)
 _agent_session_ops: dict[str, dict[str, deque]] = defaultdict(lambda: defaultdict(deque))
 
 # Lock to protect agent timestamps in concurrent access
 _agent_ops_lock: threading.Lock = threading.Lock()
 
-# Internal background task handle for metrics export
-_metrics_export_task: Optional[asyncio.Task] = None
-_prometheus_thread: Optional[threading.Thread] = None
+
+def inc_counter(counter_name: str, delta: int = 1) -> None:
+    """No-op counter increment."""
+    pass
+
+
+def record_latency(op_name: str, duration: float) -> None:
+    """No-op latency record."""
+    pass
 
 
 def is_rate_limited(session_id: str, agent_lens: str) -> bool:
@@ -318,157 +295,50 @@ def record_agent_op(session_id: str, agent_lens: str) -> None:
     logger.debug("record_agent_op session=%s lens=%s count=%s", session_id, agent_lens, count)
 
 
-async def _metrics_exporter_loop():
-    path = Path(CONFIG.metrics_export_path)
-    interval = max(1, CONFIG.metrics_export_interval_seconds)
-    try:
-        while True:
-            try:
-                with _metrics_lock:
-                    snapshot = {
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "metrics": {
-                            "counters": dict(METRICS["counters"]),
-                            "latencies": {k: list(v) for k, v in METRICS["latencies"].items()},
-                        },
-                    }
-                tmp = path.with_suffix('.tmp')
-                tmp.write_text(json.dumps(snapshot))
-                tmp.replace(path)
-            except Exception:
-                print("[mcp] metrics export error", file=sys.stderr)
-            await asyncio.sleep(interval)
-    except asyncio.CancelledError:
-        return
-
-
 def ensure_metrics_exporter_started():
-    """Start the background exporter task if enabled and not already running."""
-    global _metrics_export_task
-    if not CONFIG.metrics_export_enabled:
-        return
-    if _metrics_export_task and not _metrics_export_task.done():
-        return
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # no running loop (e.g., called at import time) — defer start
-        return
-    _metrics_export_task = loop.create_task(_metrics_exporter_loop())
-    print(
-        f"[mcp] metrics exporter started, writing to {CONFIG.metrics_export_path} every {CONFIG.metrics_export_interval_seconds}s",
-        file=sys.stderr,
-    )
-
-
-def _format_prometheus_metrics() -> str:
-    """Render a minimal Prometheus plaintext exposition for in-memory METRICS."""
-    lines = []
-    with _metrics_lock:
-        # counters
-        for k, v in list(METRICS["counters"].items()):
-            name = f"mcp_{k}_total"
-            lines.append(f"# TYPE {name} counter")
-            lines.append(f"{name} {int(v)}")
-        # latencies: expose avg per op
-        for k, samples in list(METRICS["latencies"].items()):
-            name = f"mcp_{k}_avg_seconds"
-            avg = (sum(samples) / len(samples)) if samples else 0.0
-            lines.append(f"# TYPE {name} gauge")
-            lines.append(f"{name} {avg:.6f}")
-    # return joined
-    return "\n".join(lines) + "\n"
-
-
-class _MetricsHandler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        if parsed.path != "/metrics":
-            self.send_response(404)
-            self.end_headers()
-            return
-        payload = _format_prometheus_metrics().encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain; version=0.0.4")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
-
-    def log_message(self, format, *args):
-        # keep handler quiet
-        return
-
-
-class _ReusableTCPServer(socketserver.TCPServer):
-    allow_reuse_address = True
-
-
-_prometheus_httpd: Optional[socketserver.TCPServer] = None
+    """No-op."""
+    pass
 
 
 def ensure_prometheus_server_started():
-    """Start a small HTTP server in a background thread that serves `/metrics`."""
-    global _prometheus_thread, _prometheus_httpd
-    if not CONFIG.metrics_prometheus_enabled:
-        return
-    if _prometheus_thread and _prometheus_thread.is_alive():
-        return
-    addr = CONFIG.prometheus_listen_addr
-    port = CONFIG.prometheus_port
-
-    def _serve():
-        global _prometheus_httpd
-        try:
-            with _ReusableTCPServer((addr, port), _MetricsHandler) as httpd:
-                _prometheus_httpd = httpd
-                httpd.serve_forever()
-        except Exception:
-            print(f"[mcp] prometheus server error on {addr}:{port}", file=sys.stderr)
-
-    print(f"[mcp] prometheus server starting on {addr}:{port}", file=sys.stderr)
-
-    _prometheus_thread = threading.Thread(target=_serve, daemon=True)
-    _prometheus_thread.start()
+    """No-op."""
+    pass
 
 
 def stop_metrics_exporter():
-    """Cancel the background metrics exporter if running."""
-    global _metrics_export_task
-    if _metrics_export_task and not _metrics_export_task.done():
-        _metrics_export_task.cancel()
-    _metrics_export_task = None
+    """No-op."""
+    pass
 
 
 def stop_prometheus_server():
-    """Shutdown the Prometheus HTTP server if running."""
-    global _prometheus_httpd, _prometheus_thread
-    if _prometheus_httpd:
-        try:
-            _prometheus_httpd.shutdown()
-            _prometheus_httpd.server_close()
-        except Exception:
-            pass
-    _prometheus_httpd = None
-    _prometheus_thread = None
+    """No-op."""
+    pass
 
 
 def _logs_dir() -> Path:
     return Path(__file__).parent.parent / "_logs"
 
 
-def save_session_snapshot(session: EnsembleSession, label: str) -> None:
-    """Persist a lightweight snapshot of the session state to _logs for recovery."""
+def log_session_event(session: EnsembleSession, event_type: str, details: dict | None = None) -> None:
+    """Persist a lightweight event log to _logs."""
     try:
         log_dir = _logs_dir()
         log_dir.mkdir(exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
         path = log_dir / f"ensemble-session-{session.session_id}.jsonl"
+        
         payload = {
             "timestamp": ts,
-            "label": label,
-            "session": session.to_dict(),
+            "event": event_type,
+            "session_id": session.session_id,
         }
+        if details:
+            payload["details"] = details
+            
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload) + "\n")
     except Exception:
-        logger.debug("session snapshot failed", exc_info=True)
+        logger.debug("session log failed", exc_info=True)
+
+# Backward compatibility alias if needed, but we will update calls
+save_session_snapshot = log_session_event

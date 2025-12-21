@@ -44,8 +44,8 @@ def save_session_to_history(session: LateralSession) -> None:
         logger.error(f"Failed to save session to history: {e}")
 
 
-def save_session_snapshot(session: LateralSession, label: str) -> None:
-    """Append a lightweight snapshot to a per-session log for crash recovery."""
+def log_session_event(session: LateralSession, event_type: str, details: dict | None = None) -> None:
+    """Append a lightweight event log to a per-session log."""
     config = get_config()
     if not config.persistence.enabled:
         return
@@ -56,15 +56,20 @@ def save_session_snapshot(session: LateralSession, label: str) -> None:
     path = logs_dir / f"lateral-synthesis-session-{session.session_id}.jsonl"
     payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "label": label,
-        "session": session.to_dict(),
+        "event": event_type,
+        "session_id": session.session_id,
     }
+    if details:
+        payload["details"] = details
 
     try:
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(payload) + "\n")
     except Exception as e:
-        logger.debug(f"Failed to write session snapshot: {e}")
+        logger.debug(f"Failed to write session log: {e}")
+
+# Alias for backward compatibility
+save_session_snapshot = log_session_event
 
 
 def load_sessions_from_history(limit: int = 100) -> list[LateralSession]:
