@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 def get_logs_dir() -> Path:
     """Get the path to the logs directory."""
-    # Logs dir is at the root level (parent of lateral-synthesis dir)
-    return Path(__file__).parent.parent.parent / "_logs"
+    # Logs dir is inside the lateral-synthesis folder
+    return Path(__file__).parent.parent / "_logs"
 
 
 def save_session_to_history(session: LateralSession) -> None:
@@ -82,19 +82,43 @@ def load_sessions_from_history(limit: int = 100) -> list[LateralSession]:
     for file_path in log_files[:limit]:
         try:
             with open(file_path) as f:
+                last_valid_session = None
                 for line in f:
                     line = line.strip()
                     if line:
                         try:
                             data = json.loads(line)
-                            sessions.append(LateralSession.from_dict(data))
+                            # Handle both formats:
+                            # 1. Direct session dict: {"session_id": ..., ...}
+                            # 2. Snapshot wrapper: {"timestamp": ..., "label": ..., "session": {...}}
+                            if "session" in data and isinstance(data["session"], dict):
+                                # This is a snapshot wrapper - extract the session
+                                session_data = data["session"]
+                            else:
+                                # This is a direct session dict
+                                session_data = data
+                            last_valid_session = LateralSession.from_dict(session_data)
                         except json.JSONDecodeError:
                             logger.warning(f"Skipping invalid JSON line in {file_path}")
                         except Exception as e:
                             logger.warning(f"Skipping invalid session in {file_path}: {e}")
+                # Only add the last valid session from each file (most recent state)
+                if last_valid_session is not None:
+                    sessions.append(last_valid_session)
         except Exception as e:
             logger.error(f"Failed to read log file {file_path}: {e}")
     
-    # Double check sort order (trusting filename sort is usually good, but robust to sort by data)
+    # Deduplicate sessions by session_id, keeping the most complete version
+    seen_ids: dict[str, LateralSession] = {}
+    for s in sessions:
+        existing = seen_ids.get(s.session_id)
+        if existing is None:
+            seen_ids[s.session_id] = s
+        elif s.completed_at and not existing.completed_at:
+            # Prefer completed sessions
+            seen_ids[s.session_id] = s
+    
+    sessions = list(seen_ids.values())
+    # Sort by created_at descending
     sessions.sort(key=lambda s: s.created_at or "", reverse=True)
     return sessions[:limit]

@@ -46,6 +46,15 @@ Lateral Synthesis:
 python lateral-synthesis/server.py
 ```
 
+### Icons for MCP clients
+
+Flat SVG glyphs are provided for client configuration:
+
+- `ensemble-reasoning/assets/icon.svg`
+- `lateral-synthesis/assets/icon.svg`
+
+Point your MCP client (e.g., VS Code MCP settings) to these icon paths if custom icons are supported.
+
 See [ensemble-reasoning/README.md](ensemble-reasoning/README.md) and [lateral-synthesis/README.md](lateral-synthesis/README.md) for tool details, configs, and environment variables.
 
 ## Logging

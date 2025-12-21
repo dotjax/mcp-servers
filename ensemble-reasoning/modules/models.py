@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import yaml
 
@@ -156,7 +156,7 @@ class CollaborativeThought:
     weight: float = 1.0
     endorsements: dict[str, float] = field(default_factory=dict)
     challenges: list[dict] = field(default_factory=list)
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict:
         return {
@@ -178,7 +178,7 @@ class IntegrationProposal:
     integration: str
     reconciles: list[int]
     endorsements: dict[str, float] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict:
         return {
@@ -198,7 +198,7 @@ class EnsembleSession:
         self.agent_lenses = agent_lenses
         self.thoughts: list[CollaborativeThought] = []
         self.integrations: list[IntegrationProposal] = []
-        self.started_at = datetime.utcnow().isoformat()
+        self.started_at = datetime.now(timezone.utc).isoformat()
         self.completed_at: Optional[str] = None
 
         # Indices for O(1) lookups
@@ -326,7 +326,7 @@ async def _metrics_exporter_loop():
             try:
                 with _metrics_lock:
                     snapshot = {
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                         "metrics": {
                             "counters": dict(METRICS["counters"]),
                             "latencies": {k: list(v) for k, v in METRICS["latencies"].items()},
@@ -461,7 +461,7 @@ def save_session_snapshot(session: EnsembleSession, label: str) -> None:
     try:
         log_dir = _logs_dir()
         log_dir.mkdir(exist_ok=True)
-        ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
         path = log_dir / f"ensemble-session-{session.session_id}.jsonl"
         payload = {
             "timestamp": ts,

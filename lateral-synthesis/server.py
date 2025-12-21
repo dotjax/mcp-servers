@@ -16,9 +16,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from mcp.server import Server
+from mcp.server import Server, NotificationOptions
+from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import Tool, TextContent, Icon
 
 from modules.models import CONNECTION_TYPES, get_config
 from modules.tools import TOOL_HANDLERS
@@ -65,7 +66,7 @@ def setup_logging() -> None:
     root_logger.addHandler(console_handler)
     
     # File handler (JSON format)
-    logs_dir = Path(__file__).parent.parent / "_logs"
+    logs_dir = Path(__file__).parent / "_logs"
     logs_dir.mkdir(exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
@@ -234,7 +235,17 @@ TOOLS = [
 # Server Setup
 # -----------------------------------------------------------------------------
 
-server = Server("lateral-synthesis")
+# Create icon from SVG file using file:// URI
+_icon_path = Path(__file__).parent / "assets" / "icon.svg"
+_server_icon = Icon(
+    src=f"file://{_icon_path.resolve()}",
+    mimeType="image/svg+xml",
+)
+
+server = Server(
+    "Lateral Synthesis",
+    icons=[_server_icon],
+)
 logger = logging.getLogger(__name__)
 
 
@@ -290,7 +301,15 @@ async def main():
         await server.run(
             read_stream,
             write_stream,
-            server.create_initialization_options(),
+            InitializationOptions(
+                server_name="Lateral Synthesis",
+                server_version="1.0.0",
+                capabilities=server.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
+                ),
+                icons=[_server_icon],
+            ),
         )
 
 

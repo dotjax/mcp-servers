@@ -13,12 +13,13 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
 from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import Tool, TextContent, Icon
 
 # Import models and helpers from the `modules` package
 from modules.models import AGENT_LENSES, stop_metrics_exporter, stop_prometheus_server
@@ -45,7 +46,17 @@ logger = logging.getLogger("ensemble_reasoning.server")
 # MCP Server Setup
 # ============================================================================
 
-server = Server("Ensemble Reasoning")
+# Create icon from SVG file using file:// URI
+_icon_path = Path(__file__).parent / "assets" / "icon.svg"
+_server_icon = Icon(
+    src=f"file://{_icon_path.resolve()}",
+    mimeType="image/svg+xml",
+)
+
+server = Server(
+    "Ensemble Reasoning",
+    icons=[_server_icon],
+)
 
 _AGENT_LENS_NAMES = list(AGENT_LENSES.keys())
 
@@ -243,7 +254,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
 async def main():
     """Run the MCP server"""
     # Ensure log directory exists
-    log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "_logs"))
+    log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "_logs"))
     os.makedirs(log_dir, exist_ok=True)
 
     # Configure logging: console (stderr) + JSON file, default DEBUG
@@ -252,7 +263,7 @@ async def main():
     class JsonFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
             payload = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "level": record.levelname,
                 "logger": record.name,
                 "message": record.getMessage(),
@@ -273,7 +284,7 @@ async def main():
     console_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s"))
     root.addHandler(console_handler)
 
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     log_path = os.path.join(log_dir, f"ensemble-reasoning-{ts}.jsonl")
     file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
     file_handler.setLevel(getattr(logging, log_level, logging.DEBUG))
@@ -296,6 +307,7 @@ async def main():
                         notification_options=NotificationOptions(),
                         experimental_capabilities={},
                     ),
+                    icons=[_server_icon],
                 ),
             )
     finally:
