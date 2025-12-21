@@ -47,15 +47,16 @@ class JsonFormatter(logging.Formatter):
 def setup_logging() -> None:
     """Configure logging with console and file handlers."""
     log_level = os.getenv("MCP_LOG_LEVEL", "DEBUG").upper()
+    log_level_value = getattr(logging, log_level, logging.DEBUG)
     root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, log_level, logging.DEBUG))
+    root_logger.setLevel(log_level_value)
     
     # Clear existing handlers
     root_logger.handlers.clear()
     
     # Console handler (stderr for MCP compatibility)
     console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(log_level_value)
     console_format = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
@@ -71,7 +72,7 @@ def setup_logging() -> None:
     log_file = logs_dir / f"lateral-synthesis-{timestamp}.jsonl"
     
     file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(log_level_value)
     file_handler.setFormatter(JsonFormatter())
     root_logger.addHandler(file_handler)
     
@@ -260,10 +261,15 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
         
         return result
     except Exception as e:
-        logger.exception(f"Error in tool {name}")
+        logger.exception("Error in tool %s", name)
         return [TextContent(
             type="text",
-            text=json.dumps({"status": "error", "error": "internal_error", "message": str(e)})
+            text=json.dumps({
+                "status": "error",
+                "error": "internal_error",
+                "message": "Tool execution failed",
+                "details": {"tool": name, "reason": str(e)},
+            })
         )]
 
 

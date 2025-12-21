@@ -1,0 +1,20 @@
+# Ensemble Reasoning MCP Server configuration
+max_thoughts_per_session: 1000
+max_endorsements_per_thought: 100
+default_synthesis_threshold: 0.6
+max_thoughts_per_agent_per_session: 50
+positive_endorsement_threshold: 0.5
+negative_endorsement_threshold: -0.5
+enable_metrics: true
+rate_limit_ops_per_window: 5
+rate_limit_window_seconds: 60
+metrics_export_enabled: false
+metrics_export_path: /tmp/mcp_metrics.json
+metrics_export_interval_seconds: 30
+metrics_prometheus_enabled: false
+prometheus_listen_addr: 127.0.0.1
+prometheus_port: 8000
+max_thought_length: 4000
+max_note_length: 2000
+max_integration_length: 4000
+max_reconciles_per_integration: 50

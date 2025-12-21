@@ -20,7 +20,7 @@ from .models import (
     set_current_session,
 )
 from .divergence import generate_divergent_concepts
-from .persistence import save_session_to_history, load_sessions_from_history
+from .persistence import save_session_to_history, save_session_snapshot, load_sessions_from_history
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,7 @@ async def tool_start_session(args: dict) -> list[TextContent]:
     session = LateralSession.create(origin=origin, method=method)
     SESSIONS[session.session_id] = session
     set_current_session(session.session_id)
+    save_session_snapshot(session, "start")
     
     logger.info(f"Created new session {session.session_id} with origin: {origin[:50]}...")
     
@@ -119,7 +120,14 @@ async def tool_generate_divergence(args: dict) -> list[TextContent]:
         )
     
     config = get_config()
-    count = args.get("count", config.divergence.count)
+    count_raw = args.get("count", config.divergence.count)
+    try:
+        count = int(count_raw)
+    except (TypeError, ValueError):
+        return _err("invalid_count", "count must be an integer between 1 and 50")
+
+    if count < 1 or count > 50:
+        return _err("invalid_count", "count must be between 1 and 50", value=count)
     
     # If overriding, clear prior concepts/syntheses/reflection to keep state consistent
     if args.get("override"):
@@ -138,6 +146,7 @@ async def tool_generate_divergence(args: dict) -> list[TextContent]:
     session.divergent_concepts = concepts
     
     logger.info(f"Generated {len(concepts)} divergent concepts for session {session.session_id}")
+    save_session_snapshot(session, "divergence")
     
     return _ok(
         session_id=session.session_id,
@@ -250,6 +259,7 @@ async def tool_record_synthesis(args: dict) -> list[TextContent]:
     
     session.syntheses.append(synthesis)
     remaining = session.get_remaining_concepts()
+    save_session_snapshot(session, "synthesis")
     
     logger.info(f"Recorded synthesis for '{divergent_concept}' in session {session.session_id}")
     
@@ -350,6 +360,7 @@ async def tool_reflect_on_session(args: dict) -> list[TextContent]:
     
     session.reflection = reflection
     session.completed_at = datetime.now(timezone.utc).isoformat()
+    save_session_snapshot(session, "reflection")
     
     # Save to history
     save_session_to_history(session)

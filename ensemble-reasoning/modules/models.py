@@ -13,6 +13,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
+import yaml
 
 # Basic runtime settings
 CONSOLE_OUTPUT = True
@@ -22,28 +23,103 @@ logger = logging.getLogger("ensemble_reasoning.models")
 # Runtime-configurable server settings (can be tuned via environment variables)
 @dataclass
 class ServerConfig:
-    max_thoughts_per_session: int = int(os.getenv("MCP_MAX_THOUGHTS_PER_SESSION", 1000))
-    max_endorsements_per_thought: int = int(os.getenv("MCP_MAX_ENDORSEMENTS_PER_THOUGHT", 100))
-    default_synthesis_threshold: float = float(os.getenv("MCP_DEFAULT_SYNTHESIS_THRESHOLD", 0.6))
-    max_thoughts_per_agent_per_session: int = int(os.getenv("MCP_MAX_THOUGHTS_PER_AGENT", 50))
-    positive_endorsement_threshold: float = float(os.getenv("MCP_POS_ENDORSE_THRESHOLD", 0.5))
-    negative_endorsement_threshold: float = float(os.getenv("MCP_NEG_ENDORSE_THRESHOLD", -0.5))
-    enable_metrics: bool = os.getenv("MCP_ENABLE_METRICS", "1") not in ("0", "false", "False")
+    max_thoughts_per_session: int = 1000
+    max_endorsements_per_thought: int = 100
+    default_synthesis_threshold: float = 0.6
+    max_thoughts_per_agent_per_session: int = 50
+    positive_endorsement_threshold: float = 0.5
+    negative_endorsement_threshold: float = -0.5
+    enable_metrics: bool = True
     # Rate limiter: max operations per agent in the sliding window
-    rate_limit_ops_per_window: int = int(os.getenv("MCP_RATE_LIMIT_OPS", 5))
-    rate_limit_window_seconds: int = int(os.getenv("MCP_RATE_LIMIT_WINDOW_S", 60))
+    rate_limit_ops_per_window: int = 5
+    rate_limit_window_seconds: int = 60
     # Metrics export
-    metrics_export_enabled: bool = os.getenv("MCP_METRICS_EXPORT", "0") not in ("0", "false", "False")
-    metrics_export_path: str = os.getenv("MCP_METRICS_EXPORT_PATH", "/tmp/mcp_metrics.json")
-    metrics_export_interval_seconds: int = int(os.getenv("MCP_METRICS_EXPORT_INTERVAL", 30))
+    metrics_export_enabled: bool = False
+    metrics_export_path: str = "/tmp/mcp_metrics.json"
+    metrics_export_interval_seconds: int = 30
     # Prometheus endpoint
-    metrics_prometheus_enabled: bool = os.getenv("MCP_PROMETHEUS", "0") not in ("0", "false", "False")
-    prometheus_listen_addr: str = os.getenv("MCP_PROMETHEUS_ADDR", "127.0.0.1")
-    prometheus_port: int = int(os.getenv("MCP_PROMETHEUS_PORT", "8000"))
+    metrics_prometheus_enabled: bool = False
+    prometheus_listen_addr: str = "127.0.0.1"
+    prometheus_port: int = 8000
+    # Input bounds
+    max_thought_length: int = 4000
+    max_note_length: int = 2000
+    max_integration_length: int = 4000
+    max_reconciles_per_integration: int = 50
+
+
+def _env_bool(name: str, current: bool) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return current
+    return val.lower() not in ("0", "false", "no")
+
+
+def _env_int(name: str, current: int) -> int:
+    val = os.getenv(name)
+    if val is None:
+        return current
+    try:
+        return int(val)
+    except ValueError:
+        return current
+
+
+def _env_float(name: str, current: float) -> float:
+    val = os.getenv(name)
+    if val is None:
+        return current
+    try:
+        return float(val)
+    except ValueError:
+        return current
+
+
+def _env_str(name: str, current: str) -> str:
+    val = os.getenv(name)
+    return val if val is not None else current
+
+
+def load_config(config_path: Path | None = None) -> ServerConfig:
+    """Load config from YAML with environment overrides."""
+    cfg = ServerConfig()
+    path = config_path or Path(__file__).parent.parent / "config.yaml"
+
+    if path.exists():
+        try:
+            data = yaml.safe_load(path.read_text()) or {}
+            for key, value in data.items():
+                if hasattr(cfg, key):
+                    setattr(cfg, key, value)
+        except Exception:
+            logger.warning("Failed to load config.yaml; using defaults", exc_info=True)
+
+    # Environment overrides
+    cfg.max_thoughts_per_session = _env_int("MCP_MAX_THOUGHTS_PER_SESSION", cfg.max_thoughts_per_session)
+    cfg.max_endorsements_per_thought = _env_int("MCP_MAX_ENDORSEMENTS_PER_THOUGHT", cfg.max_endorsements_per_thought)
+    cfg.default_synthesis_threshold = _env_float("MCP_DEFAULT_SYNTHESIS_THRESHOLD", cfg.default_synthesis_threshold)
+    cfg.max_thoughts_per_agent_per_session = _env_int("MCP_MAX_THOUGHTS_PER_AGENT", cfg.max_thoughts_per_agent_per_session)
+    cfg.positive_endorsement_threshold = _env_float("MCP_POS_ENDORSE_THRESHOLD", cfg.positive_endorsement_threshold)
+    cfg.negative_endorsement_threshold = _env_float("MCP_NEG_ENDORSE_THRESHOLD", cfg.negative_endorsement_threshold)
+    cfg.enable_metrics = _env_bool("MCP_ENABLE_METRICS", cfg.enable_metrics)
+    cfg.rate_limit_ops_per_window = _env_int("MCP_RATE_LIMIT_OPS", cfg.rate_limit_ops_per_window)
+    cfg.rate_limit_window_seconds = _env_int("MCP_RATE_LIMIT_WINDOW_S", cfg.rate_limit_window_seconds)
+    cfg.metrics_export_enabled = _env_bool("MCP_METRICS_EXPORT", cfg.metrics_export_enabled)
+    cfg.metrics_export_path = _env_str("MCP_METRICS_EXPORT_PATH", cfg.metrics_export_path)
+    cfg.metrics_export_interval_seconds = _env_int("MCP_METRICS_EXPORT_INTERVAL", cfg.metrics_export_interval_seconds)
+    cfg.metrics_prometheus_enabled = _env_bool("MCP_PROMETHEUS", cfg.metrics_prometheus_enabled)
+    cfg.prometheus_listen_addr = _env_str("MCP_PROMETHEUS_ADDR", cfg.prometheus_listen_addr)
+    cfg.prometheus_port = _env_int("MCP_PROMETHEUS_PORT", cfg.prometheus_port)
+    cfg.max_thought_length = _env_int("MCP_MAX_THOUGHT_LENGTH", cfg.max_thought_length)
+    cfg.max_note_length = _env_int("MCP_MAX_NOTE_LENGTH", cfg.max_note_length)
+    cfg.max_integration_length = _env_int("MCP_MAX_INTEGRATION_LENGTH", cfg.max_integration_length)
+    cfg.max_reconciles_per_integration = _env_int("MCP_MAX_RECONCILES", cfg.max_reconciles_per_integration)
+
+    return cfg
 
 
 # Global config instance
-CONFIG = ServerConfig()
+CONFIG = load_config()
 
 
 # Predefined agent lenses
@@ -205,8 +281,8 @@ def record_latency(op_name: str, duration: float) -> None:
             del lat[:len(lat) - _MAX_LATENCY_SAMPLES]
     logger.debug("latency %s add %.4f samples=%s", op_name, duration, len(METRICS["latencies"][op_name]))
 
-# Per-agent recent operation timestamps for rate limiting (agent_lens -> deque[timestamps])
-_agent_op_timestamps: dict[str, deque] = defaultdict(deque)
+# Per-agent recent operation timestamps for rate limiting (scoped per session)
+_agent_session_ops: dict[str, dict[str, deque]] = defaultdict(lambda: defaultdict(deque))
 
 # Lock to protect agent timestamps in concurrent access
 _agent_ops_lock: threading.Lock = threading.Lock()
@@ -216,52 +292,54 @@ _metrics_export_task: Optional[asyncio.Task] = None
 _prometheus_thread: Optional[threading.Thread] = None
 
 
-def is_rate_limited(agent_lens: str) -> bool:
-    """Return True if the agent is currently rate-limited under sliding-window rules."""
+def is_rate_limited(session_id: str, agent_lens: str) -> bool:
+    """Return True if the agent is rate-limited under sliding-window rules for a given session."""
     now = time.time()
     window = CONFIG.rate_limit_window_seconds
     cutoff = now - window
     with _agent_ops_lock:
-        dq = _agent_op_timestamps[agent_lens]
-        # prune old timestamps from the left
+        dq = _agent_session_ops[session_id][agent_lens]
         while dq and dq[0] < cutoff:
             dq.popleft()
         limited = len(dq) >= CONFIG.rate_limit_ops_per_window
-    logger.debug("rate_limit_check lens=%s count=%s limited=%s", agent_lens, len(dq), limited)
+        count = len(dq)
+    logger.debug("rate_limit_check session=%s lens=%s count=%s limited=%s", session_id, agent_lens, count, limited)
     return limited
 
 
-def record_agent_op(agent_lens: str) -> None:
-    """Record an operation timestamp for `agent_lens`."""
+def record_agent_op(session_id: str, agent_lens: str) -> None:
+    """Record an operation timestamp for `agent_lens` within a session."""
     now = time.time()
     with _agent_ops_lock:
-        dq = _agent_op_timestamps[agent_lens]
+        dq = _agent_session_ops[session_id][agent_lens]
         dq.append(now)
+        count = len(dq)
     inc_counter("agent_ops_total")
-    logger.debug("record_agent_op lens=%s count=%s", agent_lens, len(_agent_op_timestamps[agent_lens]))
+    logger.debug("record_agent_op session=%s lens=%s count=%s", session_id, agent_lens, count)
 
 
 async def _metrics_exporter_loop():
     path = Path(CONFIG.metrics_export_path)
     interval = max(1, CONFIG.metrics_export_interval_seconds)
-    while True:
-        try:
-            with _metrics_lock:
-                snapshot = {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "metrics": {
-                        "counters": dict(METRICS["counters"]),
-                        "latencies": {k: list(v) for k, v in METRICS["latencies"].items()},
-                    },
-                }
-            # write atomically
-            tmp = path.with_suffix('.tmp')
-            tmp.write_text(json.dumps(snapshot))
-            tmp.replace(path)
-        except Exception:
-            # swallow to avoid killing the exporter
-            print("[mcp] metrics export error", file=sys.stderr)
-        await asyncio.sleep(interval)
+    try:
+        while True:
+            try:
+                with _metrics_lock:
+                    snapshot = {
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "metrics": {
+                            "counters": dict(METRICS["counters"]),
+                            "latencies": {k: list(v) for k, v in METRICS["latencies"].items()},
+                        },
+                    }
+                tmp = path.with_suffix('.tmp')
+                tmp.write_text(json.dumps(snapshot))
+                tmp.replace(path)
+            except Exception:
+                print("[mcp] metrics export error", file=sys.stderr)
+            await asyncio.sleep(interval)
+    except asyncio.CancelledError:
+        return
 
 
 def ensure_metrics_exporter_started():
@@ -321,9 +399,16 @@ class _MetricsHandler(http.server.BaseHTTPRequestHandler):
         return
 
 
+class _ReusableTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+
+_prometheus_httpd: Optional[socketserver.TCPServer] = None
+
+
 def ensure_prometheus_server_started():
     """Start a small HTTP server in a background thread that serves `/metrics`."""
-    global _prometheus_thread
+    global _prometheus_thread, _prometheus_httpd
     if not CONFIG.metrics_prometheus_enabled:
         return
     if _prometheus_thread and _prometheus_thread.is_alive():
@@ -332,8 +417,10 @@ def ensure_prometheus_server_started():
     port = CONFIG.prometheus_port
 
     def _serve():
+        global _prometheus_httpd
         try:
-            with socketserver.TCPServer((addr, port), _MetricsHandler) as httpd:
+            with _ReusableTCPServer((addr, port), _MetricsHandler) as httpd:
+                _prometheus_httpd = httpd
                 httpd.serve_forever()
         except Exception:
             print(f"[mcp] prometheus server error on {addr}:{port}", file=sys.stderr)
@@ -342,3 +429,46 @@ def ensure_prometheus_server_started():
 
     _prometheus_thread = threading.Thread(target=_serve, daemon=True)
     _prometheus_thread.start()
+
+
+def stop_metrics_exporter():
+    """Cancel the background metrics exporter if running."""
+    global _metrics_export_task
+    if _metrics_export_task and not _metrics_export_task.done():
+        _metrics_export_task.cancel()
+    _metrics_export_task = None
+
+
+def stop_prometheus_server():
+    """Shutdown the Prometheus HTTP server if running."""
+    global _prometheus_httpd, _prometheus_thread
+    if _prometheus_httpd:
+        try:
+            _prometheus_httpd.shutdown()
+            _prometheus_httpd.server_close()
+        except Exception:
+            pass
+    _prometheus_httpd = None
+    _prometheus_thread = None
+
+
+def _logs_dir() -> Path:
+    return Path(__file__).parent.parent / "_logs"
+
+
+def save_session_snapshot(session: EnsembleSession, label: str) -> None:
+    """Persist a lightweight snapshot of the session state to _logs for recovery."""
+    try:
+        log_dir = _logs_dir()
+        log_dir.mkdir(exist_ok=True)
+        ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+        path = log_dir / f"ensemble-session-{session.session_id}.jsonl"
+        payload = {
+            "timestamp": ts,
+            "label": label,
+            "session": session.to_dict(),
+        }
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload) + "\n")
+    except Exception:
+        logger.debug("session snapshot failed", exc_info=True)

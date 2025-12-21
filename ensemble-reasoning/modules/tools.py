@@ -48,6 +48,7 @@ async def tool_start_collaborative(args: dict) -> list[TextContent]:
     session = models.EnsembleSession(session_id, problem, agent_lenses)
     models.active_sessions[session_id] = session
     models.current_session_id = session_id
+    models.save_session_snapshot(session, "start")
 
     # Start metrics exporter / Prometheus endpoint if configured
     models.ensure_metrics_exporter_started()
@@ -70,11 +71,20 @@ async def tool_contribute(args: dict) -> list[TextContent]:
 
     session = models.active_sessions[session_id]
     agent_lens = args["agentLens"]
-    # Rate limiter enforcement
-    if models.is_rate_limited(agent_lens):
-        return _err("rate_limited", agentLens=agent_lens)
     if agent_lens not in session.agent_lenses:
         return _err("agent_not_in_session", agentLens=agent_lens)
+
+    # Rate limiter enforcement (scoped per session)
+    if models.is_rate_limited(session.session_id, agent_lens):
+        return _err("rate_limited", agentLens=agent_lens)
+
+    thought_text = args["thought"]
+    if len(thought_text) > models.CONFIG.max_thought_length:
+        return _err(
+            "thought_too_long",
+            message=f"Thought exceeds {models.CONFIG.max_thought_length} characters",
+            maxLength=models.CONFIG.max_thought_length,
+        )
 
     builds_on = args.get("buildsOn", [])
     for tid in builds_on:
@@ -85,7 +95,7 @@ async def tool_contribute(args: dict) -> list[TextContent]:
 
     thought = models.CollaborativeThought(
         thought_id=0,
-        thought=args["thought"],
+        thought=thought_text,
         agent_lens=agent_lens,
         builds_on=builds_on,
         weight=weight
@@ -94,9 +104,10 @@ async def tool_contribute(args: dict) -> list[TextContent]:
     start = time.perf_counter()
     thought_id = session.add_thought(thought)
     # record operation for rate limiting
-    models.record_agent_op(agent_lens)
+    models.record_agent_op(session.session_id, agent_lens)
     models.inc_counter("contribute_calls")
     models.record_latency("contribute", time.perf_counter() - start)
+    models.save_session_snapshot(session, "contribute")
 
     if models.CONSOLE_OUTPUT:
         print(f"\n[mcp] [{agent_lens}] thought #{thought_id}", file=sys.stderr)
@@ -115,9 +126,6 @@ async def tool_endorse_challenge(args: dict) -> list[TextContent]:
     session = models.active_sessions[session_id]
     thought_id = args["thoughtId"]
     agent_lens = args["agentLens"]
-    # Rate limiter enforcement
-    if models.is_rate_limited(agent_lens):
-        return _err("rate_limited", agentLens=agent_lens)
     endorsement_level = max(-1.0, min(1.0, args["endorsementLevel"]))
     note = args.get("note", "")
 
@@ -127,6 +135,17 @@ async def tool_endorse_challenge(args: dict) -> list[TextContent]:
 
     if agent_lens not in session.agent_lenses:
         return _err("agent_not_in_session", agentLens=agent_lens)
+
+    # Rate limiter enforcement (scoped per session)
+    if models.is_rate_limited(session.session_id, agent_lens):
+        return _err("rate_limited", agentLens=agent_lens)
+
+    if note and len(note) > models.CONFIG.max_note_length:
+        return _err(
+            "note_too_long",
+            message=f"Note exceeds {models.CONFIG.max_note_length} characters",
+            maxLength=models.CONFIG.max_note_length,
+        )
 
     if agent_lens == thought.agent_lens:
         return _err("self_endorsement_not_allowed")
@@ -151,7 +170,8 @@ async def tool_endorse_challenge(args: dict) -> list[TextContent]:
     models.record_latency("endorse", time.perf_counter() - start)
 
     # record operation for rate limiting
-    models.record_agent_op(agent_lens)
+    models.record_agent_op(session.session_id, agent_lens)
+    models.save_session_snapshot(session, "endorse_or_challenge")
 
     return _ok(
         thoughtId=thought_id,
@@ -193,6 +213,7 @@ async def tool_synthesize(args: dict) -> list[TextContent]:
         )
     models.inc_counter("synthesize_calls")
     models.record_latency("synthesize", time.perf_counter() - start)
+    models.save_session_snapshot(session, "synthesize")
 
     return _ok(**synthesis)
 
@@ -208,14 +229,34 @@ async def tool_propose_integration(args: dict) -> list[TextContent]:
     integration = args["integration"]
     reconciles = args["reconciles"]
 
-    # Rate limiter enforcement
-    if models.is_rate_limited(agent_lens):
-        return _err("rate_limited", agentLens=agent_lens)
-
     if agent_lens not in session.agent_lenses:
         return _err("agent_not_in_session", agentLens=agent_lens)
 
+    # Rate limiter enforcement (scoped per session)
+    if models.is_rate_limited(session.session_id, agent_lens):
+        return _err("rate_limited", agentLens=agent_lens)
+
+    if len(integration) > models.CONFIG.max_integration_length:
+        return _err(
+            "integration_too_long",
+            message=f"Integration exceeds {models.CONFIG.max_integration_length} characters",
+            maxLength=models.CONFIG.max_integration_length,
+        )
+
+    if not isinstance(reconciles, list):
+        return _err("invalid_reconciles", message="reconciles must be a list of thought IDs")
+
+    if len(reconciles) > models.CONFIG.max_reconciles_per_integration:
+        return _err(
+            "too_many_reconciles",
+            message=f"Reconciles exceeds {models.CONFIG.max_reconciles_per_integration} items",
+            maxItems=models.CONFIG.max_reconciles_per_integration,
+        )
+
     for tid in reconciles:
+        if not isinstance(tid, int):
+            return _err("invalid_reconciles", message="reconciles must contain integers", thoughtId=tid)
+
         if not session.get_thought(tid):
             return _err("invalid_reconciles", thoughtId=tid)
 
@@ -228,7 +269,8 @@ async def tool_propose_integration(args: dict) -> list[TextContent]:
 
     proposal_id = session.add_integration(proposal)
     # record operation for rate limiting
-    models.record_agent_op(agent_lens)
+    models.record_agent_op(session.session_id, agent_lens)
+    models.save_session_snapshot(session, "propose_integration")
     if models.CONSOLE_OUTPUT:
         print(f"\n[mcp] [{agent_lens}] proposes integration #{proposal_id}", file=sys.stderr)
         print(f"[mcp] reconciles: {reconciles}", file=sys.stderr)
@@ -280,15 +322,18 @@ async def tool_get_metrics(args: dict) -> list[TextContent]:
 async def tool_get_rate_status(args: dict) -> list[TextContent]:
     """Return current per-agent rate limiter states (counts in window)."""
     logger.debug("get_rate_status args=%s", args)
-    status = {}
+    status: dict[str, dict[str, int]] = {}
 
     now = time.time()
     cutoff = now - models.CONFIG.rate_limit_window_seconds
     with models._agent_ops_lock:
-        for agent, dq in models._agent_op_timestamps.items():
-            while dq and dq[0] < cutoff:
-                dq.popleft()
-            status[agent] = len(dq)
+        for session_id, per_agent in models._agent_session_ops.items():
+            session_status: dict[str, int] = {}
+            for agent, dq in per_agent.items():
+                while dq and dq[0] < cutoff:
+                    dq.popleft()
+                session_status[agent] = len(dq)
+            status[session_id] = session_status
 
     return _ok(rateStatus=status)
 
@@ -297,18 +342,20 @@ async def tool_reset_agent_rate(args: dict) -> list[TextContent]:
     """Admin tool: reset/clear the rate window for a given agent lens."""
     logger.debug("reset_agent_rate args=%s", args)
     agent_lens = args.get("agentLens")
+    session_id = args.get("sessionId")
     if not agent_lens:
         return _err("missing_agentLens")
 
     with models._agent_ops_lock:
-        if agent_lens in models._agent_op_timestamps:
-            models._agent_op_timestamps[agent_lens].clear()
+        if session_id:
+            models._agent_session_ops[session_id][agent_lens].clear()
         else:
-            # create empty deque for visibility
-            models._agent_op_timestamps[agent_lens] = deque()
+            for per_agent in models._agent_session_ops.values():
+                per_agent[agent_lens].clear()
 
     if models.CONSOLE_OUTPUT:
-        print(f"[mcp] admin: reset rate window for {agent_lens}", file=sys.stderr)
+        scope = f"session {session_id}" if session_id else "all sessions"
+        print(f"[mcp] admin: reset rate window for {agent_lens} ({scope})", file=sys.stderr)
 
     return _ok(agentLens=agent_lens)
 

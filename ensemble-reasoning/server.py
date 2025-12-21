@@ -21,7 +21,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 # Import models and helpers from the `modules` package
-from modules.models import AGENT_LENSES
+from modules.models import AGENT_LENSES, stop_metrics_exporter, stop_prometheus_server
 
 # Tool implementations
 from modules.tools import (
@@ -221,11 +221,16 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
             )
         ]
     except Exception as e:
-        logger.error(f"Tool error: {e}")
+        logger.exception("Tool error")
         return [
             TextContent(
                 type="text",
-                text=json.dumps({"status": "error", "error": "internal_error", "message": str(e)}),
+                text=json.dumps({
+                    "status": "error",
+                    "error": "internal_error",
+                    "message": "Tool execution failed",
+                    "details": {"tool": name, "reason": str(e)},
+                }),
             )
         ]
 
@@ -275,23 +280,27 @@ async def main():
     file_handler.setFormatter(JsonFormatter())
     root.addHandler(file_handler)
 
-    # Make MCP verbose too
-    logging.getLogger("mcp").setLevel(logging.DEBUG)
+    # Align MCP logger with configured level
+    logging.getLogger("mcp").setLevel(getattr(logging, log_level, logging.DEBUG))
     logger.debug("server starting log_level=%s log_file=%s", log_level, log_path)
 
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="Ensemble Reasoning",
-                server_version="1.0.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="Ensemble Reasoning",
+                    server_version="1.0.0",
+                    capabilities=server.get_capabilities(
+                        notification_options=NotificationOptions(),
+                        experimental_capabilities={},
+                    ),
                 ),
-            ),
-        )
+            )
+    finally:
+        stop_metrics_exporter()
+        stop_prometheus_server()
 
 
 if __name__ == "__main__":
