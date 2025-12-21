@@ -4,11 +4,13 @@ Two local Model Context Protocol (MCP) servers:
 
 - Ensemble Reasoning: a collaborative, multi‑lens reasoning framework (analytical, skeptical, creative, pragmatic, ethical) with synthesis and convergence mapping.
 - Lateral Synthesis: a divergent‑thinking tool that injects random concepts to provoke novel connections (Origin → Divergence → Synthesis).
+- Federated Intelligence: a consultation tool that connects to external AI models (Ollama, OpenAI, Google, OpenRouter) for second opinions and specialized tasks.
 
 ## Repository Structure
 
 - `ensemble-reasoning/` — Ensemble Reasoning MCP server
 - `lateral-synthesis/` — Lateral Synthesis MCP server
+- `federated-intelligence/` — Federated Intelligence MCP server
 - `_logs/` — runtime logs (ignored by Git)
 
 ## Requirements
@@ -30,6 +32,7 @@ Install a single server only:
 ```bash
 pip install -r ensemble-reasoning/requirements.txt
 pip install -r lateral-synthesis/requirements.txt
+pip install -r federated-intelligence/requirements.txt
 ```
 
 ## Run
@@ -46,16 +49,23 @@ Lateral Synthesis:
 python lateral-synthesis/server.py
 ```
 
+Federated Intelligence:
+
+```bash
+python federated-intelligence/server.py
+```
+
 ### Icons for MCP clients
 
 Flat SVG glyphs are provided for client configuration:
 
 - `ensemble-reasoning/assets/icon.svg`
 - `lateral-synthesis/assets/icon.svg`
+- `federated-intelligence/assets/icon.svg`
 
 Point your MCP client (e.g., VS Code MCP settings) to these icon paths if custom icons are supported.
 
-See [ensemble-reasoning/README.md](ensemble-reasoning/README.md) and [lateral-synthesis/README.md](lateral-synthesis/README.md) for tool details, configs, and environment variables.
+See [ensemble-reasoning/README.md](ensemble-reasoning/README.md), [lateral-synthesis/README.md](lateral-synthesis/README.md), and [federated-intelligence/README.md](federated-intelligence/README.md) for tool details, configs, and environment variables.
 
 ## Logging
 
@@ -63,6 +73,7 @@ The `_logs/` directory is ignored via `.gitignore`. Both servers default with DE
 
 - `_logs/ensemble-reasoning-YYYYMMDDTHHMMSS.jsonl`
 - `_logs/lateral-synthesis-YYYYMMDDTHHMMSS.jsonl`
+- `_logs/federated-intelligence-YYYYMMDDTHHMMSS.jsonl`
 
 ### Configure Verbosity
 
@@ -70,5 +81,6 @@ Set `MCP_LOG_LEVEL` (e.g., `INFO`). Examples:
 
 - `MCP_LOG_LEVEL=INFO python ensemble-reasoning/server.py`
 - `MCP_LOG_LEVEL=INFO python lateral-synthesis/server.py`
+- `MCP_LOG_LEVEL=INFO python federated-intelligence/server.py`
 
  

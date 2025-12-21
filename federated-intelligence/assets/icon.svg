@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background -->
+  <rect width="64" height="64" rx="12" fill="#0F172A"/>
+  
+  <!-- Connections -->
+  <path d="M32 32L32 14" stroke="#94A3B8" stroke-width="3" stroke-linecap="round"/>
+  <path d="M32 32L16 44" stroke="#94A3B8" stroke-width="3" stroke-linecap="round"/>
+  <path d="M32 32L48 44" stroke="#94A3B8" stroke-width="3" stroke-linecap="round"/>
+  
+  <!-- Satellites -->
+  <circle cx="32" cy="14" r="5" fill="#22C55E"/> <!-- Green Top -->
+  <circle cx="16" cy="44" r="5" fill="#38BDF8"/> <!-- Blue Left -->
+  <circle cx="48" cy="44" r="5" fill="#F59E0B"/> <!-- Amber Right -->
+  
+  <!-- Central Node -->
+  <circle cx="32" cy="32" r="8" fill="#6366F1"/> <!-- Indigo Center -->
+  <circle cx="32" cy="32" r="4" fill="#E0E7FF" fill-opacity="0.5"/> <!-- Inner highlight -->
+</svg>

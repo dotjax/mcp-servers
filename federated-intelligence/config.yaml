@@ -1,0 +1,28 @@
+# Configuration for Federated Intelligence MCP Server
+
+# Global defaults
+defaults:
+  temperature: 0.7
+  max_tokens: 4096
+
+# Provider configurations
+providers:
+  ollama:
+    enabled: true
+    base_url: "http://localhost:11434/api"
+    default_model: "deepseek-v3.2:cloud"
+  
+  openai:
+    enabled: false
+    # api_key: set via OPENAI_API_KEY env var
+    default_model: "gpt-4o"
+  
+  openrouter:
+    enabled: false
+    # api_key: set via OPENROUTER_API_KEY env var
+    default_model: "anthropic/claude-3.5-sonnet"
+  
+  google:
+    enabled: false
+    # api_key: set via GOOGLE_API_KEY env var
+    default_model: "gemini-1.5-pro"
