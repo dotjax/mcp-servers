@@ -4,11 +4,16 @@ Lateral Synthesis MCP - Divergence Strategies
 Pluggable strategies for generating divergent concepts.
 """
 
+import json
 import logging
 import random
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Path to concepts data file
+CONCEPTS_FILE = Path(__file__).parent.parent / "data" / "concepts.json"
 
 # -----------------------------------------------------------------------------
 # Base Strategy
@@ -57,23 +62,20 @@ class RandomStrategy(DivergenceStrategy):
             self._fallback_words = self._load_fallback_words()
     
     def _load_fallback_words(self) -> list[str]:
-        """Fallback word list if wonderwords not available."""
-        return [
-            # Nouns
-            "elephant", "glacier", "symphony", "blueprint", "telescope",
-            "volcano", "manuscript", "cathedral", "archipelago", "pendulum",
-            "labyrinth", "prism", "fossil", "avalanche", "compass",
-            "horizon", "mosaic", "chimera", "scaffold", "reservoir",
-            # Verbs
-            "illuminate", "cascade", "oscillate", "crystallize", "navigate",
-            "transcend", "converge", "dissolve", "amplify", "calibrate",
-            # Adjectives
-            "ephemeral", "visceral", "tangential", "primordial", "quantum",
-            "fractal", "recursive", "emergent", "liminal", "paradoxical",
-            # Abstract concepts
-            "entropy", "resonance", "symmetry", "recursion", "emergence",
-            "inertia", "catalysis", "equilibrium", "polarity", "metamorphosis",
-        ]
+        """Load fallback word list from concepts.json."""
+        try:
+            with open(CONCEPTS_FILE) as f:
+                data = json.load(f)
+            fallback = data.get("fallback_words", {})
+            words = []
+            for category in ["nouns", "verbs", "adjectives", "abstract"]:
+                words.extend(fallback.get(category, []))
+            if words:
+                return words
+        except Exception as e:
+            logger.warning(f"Failed to load concepts.json: {e}")
+        # Hardcoded minimal fallback if file missing
+        return ["entropy", "prism", "cascade", "horizon", "symmetry"]
     
     @property
     def name(self) -> str:

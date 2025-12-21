@@ -16,68 +16,17 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Add parent directory to path for shared utils
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from mcp.server import Server, NotificationOptions
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent, Icon
 
+from utils import setup_logging
 from modules.models import CONNECTION_TYPES, get_config
 from modules.tools import TOOL_HANDLERS
-
-# -----------------------------------------------------------------------------
-# Logging Setup
-# -----------------------------------------------------------------------------
-
-class JsonFormatter(logging.Formatter):
-    """Format log records as JSON for structured logging."""
-    
-    def format(self, record: logging.LogRecord) -> str:
-        log_obj = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-        }
-        if record.exc_info:
-            log_obj["exception"] = self.formatException(record.exc_info)
-        if hasattr(record, "session_id"):
-            log_obj["session_id"] = record.session_id
-        return json.dumps(log_obj)
-
-
-def setup_logging() -> None:
-    """Configure logging with console and file handlers."""
-    log_level = os.getenv("MCP_LOG_LEVEL", "DEBUG").upper()
-    log_level_value = getattr(logging, log_level, logging.DEBUG)
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level_value)
-    
-    # Clear existing handlers
-    root_logger.handlers.clear()
-    
-    # Console handler (stderr for MCP compatibility)
-    console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setLevel(log_level_value)
-    console_format = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    console_handler.setFormatter(console_format)
-    root_logger.addHandler(console_handler)
-    
-    # File handler (JSON format)
-    logs_dir = Path(__file__).parent / "_logs"
-    logs_dir.mkdir(exist_ok=True)
-    
-    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-    log_file = logs_dir / f"lateral-synthesis-{timestamp}.jsonl"
-    
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(log_level_value)
-    file_handler.setFormatter(JsonFormatter())
-    root_logger.addHandler(file_handler)
-    
-    logging.info(f"Logging initialized: console + {log_file}")
 
 
 # -----------------------------------------------------------------------------
@@ -290,7 +239,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     """Run the MCP server."""
-    setup_logging()
+    setup_logging("lateral-synthesis")
     logger.info("Starting Lateral Synthesis MCP server")
     
     # Load config

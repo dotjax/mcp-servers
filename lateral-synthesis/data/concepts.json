@@ -1,0 +1,22 @@
+{
+  "fallback_words": {
+    "nouns": [
+      "elephant", "glacier", "symphony", "blueprint", "telescope",
+      "volcano", "manuscript", "cathedral", "archipelago", "pendulum",
+      "labyrinth", "prism", "fossil", "avalanche", "compass",
+      "horizon", "mosaic", "chimera", "scaffold", "reservoir"
+    ],
+    "verbs": [
+      "illuminate", "cascade", "oscillate", "crystallize", "navigate",
+      "transcend", "converge", "dissolve", "amplify", "calibrate"
+    ],
+    "adjectives": [
+      "ephemeral", "visceral", "tangential", "primordial", "quantum",
+      "fractal", "recursive", "emergent", "liminal", "paradoxical"
+    ],
+    "abstract": [
+      "entropy", "resonance", "symmetry", "recursion", "emergence",
+      "inertia", "catalysis", "equilibrium", "polarity", "metamorphosis"
+    ]
+  }
+}

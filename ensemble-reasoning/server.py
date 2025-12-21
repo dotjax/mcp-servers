@@ -13,13 +13,19 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Add parent directory to path for shared utils
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent, Icon
+
+from utils import setup_logging
 
 # Import models and helpers from the `modules` package
 from modules.models import AGENT_LENSES, stop_metrics_exporter, stop_prometheus_server
@@ -253,47 +259,9 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     """Run the MCP server"""
-    # Ensure log directory exists
-    log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "_logs"))
-    os.makedirs(log_dir, exist_ok=True)
-
-    # Configure logging: console (stderr) + JSON file, default DEBUG
-    log_level = os.getenv("MCP_LOG_LEVEL", "DEBUG").upper()
-
-    class JsonFormatter(logging.Formatter):
-        def format(self, record: logging.LogRecord) -> str:
-            payload = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "level": record.levelname,
-                "logger": record.name,
-                "message": record.getMessage(),
-            }
-            if record.exc_info:
-                payload["exc_info"] = self.formatException(record.exc_info)
-            return json.dumps(payload)
-
-    # Root logger setup
-    root = logging.getLogger()
-    root.setLevel(getattr(logging, log_level, logging.DEBUG))
-
-    # Clear existing handlers to avoid duplication on reload
-    root.handlers.clear()
-
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(getattr(logging, log_level, logging.DEBUG))
-    console_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s"))
-    root.addHandler(console_handler)
-
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    log_path = os.path.join(log_dir, f"ensemble-reasoning-{ts}.jsonl")
-    file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
-    file_handler.setLevel(getattr(logging, log_level, logging.DEBUG))
-    file_handler.setFormatter(JsonFormatter())
-    root.addHandler(file_handler)
-
-    # Align MCP logger with configured level
-    logging.getLogger("mcp").setLevel(getattr(logging, log_level, logging.DEBUG))
-    logger.debug("server starting log_level=%s log_file=%s", log_level, log_path)
+    # Setup logging using shared utils (logs to ~/.local/state/mcp/logs/)
+    log_file = setup_logging("ensemble-reasoning")
+    logger.debug("server starting log_file=%s", log_file)
 
     try:
         async with stdio_server() as (read_stream, write_stream):
