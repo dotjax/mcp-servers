@@ -67,3 +67,4 @@ _logs/
 Thumbs.db
 lateral-synthesis/_cache/
 benchmarks/
+.cursor/
