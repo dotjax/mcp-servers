@@ -265,15 +265,37 @@ METRICS: dict[str, dict] = {
     "latencies": {}
 }
 
+# Metrics exporter thread
+_metrics_exporter_thread: Optional[threading.Thread] = None
+_metrics_exporter_stop_event: Optional[threading.Event] = None
+
+# Prometheus HTTP server
+_prometheus_server: Optional[socketserver.TCPServer] = None
+_prometheus_server_thread: Optional[threading.Thread] = None
+
 
 def inc_counter(counter_name: str, delta: int = 1) -> None:
-    """No-op counter increment."""
-    pass
+    """Increment a counter metric."""
+    if not CONFIG.enable_metrics:
+        return
+    
+    with _metrics_lock:
+        METRICS["counters"][counter_name] = METRICS["counters"].get(counter_name, 0) + delta
 
 
 def record_latency(op_name: str, duration: float) -> None:
-    """No-op latency record."""
-    pass
+    """Record a latency sample for an operation."""
+    if not CONFIG.enable_metrics:
+        return
+    
+    with _metrics_lock:
+        if op_name not in METRICS["latencies"]:
+            METRICS["latencies"][op_name] = []
+        # Keep last 1000 samples per operation to avoid unbounded growth
+        samples = METRICS["latencies"][op_name]
+        samples.append(duration)
+        if len(samples) > 1000:
+            samples.pop(0)
 
 
 def is_rate_limited(session_id: str, agent_lens: str) -> bool:
@@ -302,24 +324,176 @@ def record_agent_op(session_id: str, agent_lens: str) -> None:
     logger.debug("record_agent_op session=%s lens=%s count=%s", session_id, agent_lens, count)
 
 
+def _metrics_exporter_worker():
+    """Background thread that periodically exports metrics to JSON file."""
+    global _metrics_exporter_stop_event
+    
+    while not _metrics_exporter_stop_event.is_set():
+        try:
+            # Wait for interval or stop event
+            if _metrics_exporter_stop_event.wait(CONFIG.metrics_export_interval_seconds):
+                break  # Stop event was set
+            
+            # Export metrics
+            export_path = Path(CONFIG.metrics_export_path)
+            export_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with _metrics_lock:
+                # Create export data with timestamps
+                export_data = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "counters": dict(METRICS["counters"]),
+                    "latencies": {
+                        op: {
+                            "count": len(samples),
+                            "avg": sum(samples) / len(samples) if samples else 0.0,
+                            "min": min(samples) if samples else 0.0,
+                            "max": max(samples) if samples else 0.0,
+                        }
+                        for op, samples in METRICS["latencies"].items()
+                    }
+                }
+            
+            # Atomic write: write to temp file then rename
+            temp_path = export_path.with_suffix(export_path.suffix + ".tmp")
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(export_data, f, indent=2)
+            temp_path.replace(export_path)
+            
+            logger.debug(f"Exported metrics to {export_path}")
+        except Exception as e:
+            logger.warning(f"Metrics export failed: {e}", exc_info=True)
+
+
 def ensure_metrics_exporter_started():
-    """No-op."""
-    pass
+    """Start the metrics exporter thread if enabled and not already running."""
+    global _metrics_exporter_thread, _metrics_exporter_stop_event
+    
+    if not CONFIG.metrics_export_enabled:
+        return
+    
+    if _metrics_exporter_thread is not None and _metrics_exporter_thread.is_alive():
+        return  # Already running
+    
+    _metrics_exporter_stop_event = threading.Event()
+    _metrics_exporter_thread = threading.Thread(
+        target=_metrics_exporter_worker,
+        name="metrics-exporter",
+        daemon=True
+    )
+    _metrics_exporter_thread.start()
+    logger.info(f"Started metrics exporter (interval={CONFIG.metrics_export_interval_seconds}s, path={CONFIG.metrics_export_path})")
+
+
+class PrometheusMetricsHandler(http.server.BaseHTTPRequestHandler):
+    """HTTP handler for Prometheus /metrics endpoint."""
+    
+    def do_GET(self):
+        if self.path == "/metrics":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.end_headers()
+            
+            with _metrics_lock:
+                # Export counters as Prometheus counters
+                for name, value in METRICS["counters"].items():
+                    # Sanitize metric name (Prometheus format)
+                    safe_name = name.replace(".", "_").replace("-", "_")
+                    self.wfile.write(f"# TYPE {safe_name} counter\n".encode())
+                    self.wfile.write(f"{safe_name} {value}\n".encode())
+                
+                # Export latencies as Prometheus summaries
+                for op_name, samples in METRICS["latencies"].items():
+                    if not samples:
+                        continue
+                    safe_name = f"latency_{op_name.replace('.', '_').replace('-', '_')}"
+                    self.wfile.write(f"# TYPE {safe_name} summary\n".encode())
+                    self.wfile.write(f"{safe_name}_count {len(samples)}\n".encode())
+                    avg = sum(samples) / len(samples)
+                    self.wfile.write(f"{safe_name}_sum {sum(samples)}\n".encode())
+                    self.wfile.write(f"{safe_name} {avg}\n".encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        """Suppress default HTTP server logging."""
+        logger.debug(f"Prometheus: {format % args}")
+
+
+def _prometheus_server_worker():
+    """Run the Prometheus HTTP server."""
+    global _prometheus_server
+    
+    try:
+        _prometheus_server.serve_forever()
+    except Exception as e:
+        logger.error(f"Prometheus server error: {e}", exc_info=True)
 
 
 def ensure_prometheus_server_started():
-    """No-op."""
-    pass
+    """Start the Prometheus HTTP server if enabled and not already running."""
+    global _prometheus_server, _prometheus_server_thread
+    
+    if not CONFIG.metrics_prometheus_enabled:
+        return
+    
+    if _prometheus_server is not None:
+        return  # Already started
+    
+    try:
+        _prometheus_server = socketserver.TCPServer(
+            (CONFIG.prometheus_listen_addr, CONFIG.prometheus_port),
+            PrometheusMetricsHandler
+        )
+        _prometheus_server.allow_reuse_address = True
+        
+        _prometheus_server_thread = threading.Thread(
+            target=_prometheus_server_worker,
+            name="prometheus-server",
+            daemon=True
+        )
+        _prometheus_server_thread.start()
+        logger.info(f"Started Prometheus server at http://{CONFIG.prometheus_listen_addr}:{CONFIG.prometheus_port}/metrics")
+    except Exception as e:
+        logger.error(f"Failed to start Prometheus server: {e}", exc_info=True)
 
 
 def stop_metrics_exporter():
-    """No-op."""
-    pass
+    """Stop the metrics exporter thread."""
+    global _metrics_exporter_thread, _metrics_exporter_stop_event
+    
+    if _metrics_exporter_stop_event is not None:
+        _metrics_exporter_stop_event.set()
+    
+    if _metrics_exporter_thread is not None and _metrics_exporter_thread.is_alive():
+        _metrics_exporter_thread.join(timeout=5.0)
+        if _metrics_exporter_thread.is_alive():
+            logger.warning("Metrics exporter thread did not stop gracefully")
+        else:
+            logger.debug("Metrics exporter stopped")
+    
+    _metrics_exporter_thread = None
+    _metrics_exporter_stop_event = None
 
 
 def stop_prometheus_server():
-    """No-op."""
-    pass
+    """Stop the Prometheus HTTP server."""
+    global _prometheus_server, _prometheus_server_thread
+    
+    if _prometheus_server is not None:
+        try:
+            _prometheus_server.shutdown()
+            _prometheus_server.server_close()
+            logger.debug("Prometheus server stopped")
+        except Exception as e:
+            logger.warning(f"Error stopping Prometheus server: {e}")
+    
+    if _prometheus_server_thread is not None and _prometheus_server_thread.is_alive():
+        _prometheus_server_thread.join(timeout=2.0)
+    
+    _prometheus_server = None
+    _prometheus_server_thread = None
 
 
 def _logs_dir() -> Path:

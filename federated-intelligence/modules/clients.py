@@ -157,31 +157,42 @@ class GoogleClient(AIClient):
             raise ValueError("Google API key not configured")
         
         try:
-            model = genai.GenerativeModel(request.model)
+            # Extract system instruction from request.system_prompt or first system message
+            system_instruction = request.system_prompt
             
+            # If using messages, extract system instruction from system messages
             if request.messages:
-                # Convert OpenAI format to Gemini format
+                # Separate system messages from conversation history
                 history = []
-                last_user_message = ""
+                system_parts = []
                 
                 for msg in request.messages:
                     role = msg["role"]
                     content = msg["content"]
                     
                     if role == "system":
-                        # Gemini handles system prompts differently, but for now we can prepend to first user msg
-                        # or ignore if we can't set it easily per-request without re-init.
-                        # Let's prepend to the next user message or the very first one.
-                        pass 
+                        # Collect all system messages
+                        system_parts.append(content)
                     elif role == "user":
                         history.append({"role": "user", "parts": [content]})
-                        last_user_message = content
                     elif role == "assistant":
                         history.append({"role": "model", "parts": [content]})
                 
-                # The last message should be the new query, but request.messages might include it or not.
-                # If we are using session history, the last message is the user's new query.
-                # Gemini chat.send_message takes the new message, history is passed to start_chat.
+                # Combine system messages (request.system_prompt takes precedence)
+                if system_parts and not system_instruction:
+                    system_instruction = "\n".join(system_parts)
+                elif system_parts and system_instruction:
+                    # Both exist: prepend request.system_prompt
+                    system_instruction = system_instruction + "\n" + "\n".join(system_parts)
+                
+                # Create model with system instruction if available
+                if system_instruction:
+                    model = genai.GenerativeModel(
+                        request.model,
+                        system_instruction=system_instruction
+                    )
+                else:
+                    model = genai.GenerativeModel(request.model)
                 
                 # Pop the last message if it's from user to use as the 'message' argument
                 if history and history[-1]["role"] == "user":
@@ -203,13 +214,17 @@ class GoogleClient(AIClient):
                         )
                     )
             else:
-                # Legacy/Single-turn mode
-                prompt = request.query
-                if request.system_prompt:
-                    prompt = f"System: {request.system_prompt}\n\nUser: {request.query}"
+                # Single-turn mode: use system_instruction parameter
+                if system_instruction:
+                    model = genai.GenerativeModel(
+                        request.model,
+                        system_instruction=system_instruction
+                    )
+                else:
+                    model = genai.GenerativeModel(request.model)
                 
                 resp = await model.generate_content_async(
-                    prompt,
+                    request.query,
                     generation_config=genai.types.GenerationConfig(
                         temperature=request.temperature
                     )

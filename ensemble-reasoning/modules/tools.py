@@ -102,6 +102,8 @@ async def tool_contribute(args: dict) -> list[TextContent]:
     # record operation for rate limiting
     models.record_agent_op(session.session_id, agent_lens)
     models.log_session_event(session, "contribute", {"thought": thought.to_dict()})
+    duration = time.perf_counter() - start
+    models.record_latency("contribute_perspective", duration)
 
     if models.CONSOLE_OUTPUT:
         print(f"\n[mcp] [{agent_lens}] thought #{thought_id}", file=sys.stderr)
@@ -161,6 +163,8 @@ async def tool_endorse_challenge(args: dict) -> list[TextContent]:
         print(f"\n[mcp] [{agent_lens}] {tag} thought #{thought_id}: {endorsement_level:+.2f}", file=sys.stderr)
 
     models.record_agent_op(session.session_id, agent_lens)
+    duration = time.perf_counter() - start
+    models.record_latency("endorse_or_challenge", duration)
     models.log_session_event(session, "endorse_challenge", {
         "thought_id": thought_id,
         "agent_lens": agent_lens,
@@ -190,6 +194,9 @@ async def tool_synthesize(args: dict) -> list[TextContent]:
     tensions = identify_tensions(session)
     convergence = compute_convergence_score(session)
     cycles = detect_cycles(session)
+    
+    duration = time.perf_counter() - start
+    models.record_latency("synthesize_convergence", duration)
 
     synthesis = {
         "sessionId": session_id,

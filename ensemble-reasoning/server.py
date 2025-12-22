@@ -28,7 +28,13 @@ from mcp.types import Tool, TextContent, Icon
 from utils import setup_logging
 
 # Import models and helpers from the `modules` package
-from modules.models import AGENT_LENSES, stop_metrics_exporter, stop_prometheus_server
+from modules.models import (
+    AGENT_LENSES,
+    stop_metrics_exporter,
+    stop_prometheus_server,
+    ensure_metrics_exporter_started,
+    ensure_prometheus_server_started,
+)
 
 # Tool implementations
 from modules.tools import (
@@ -75,7 +81,7 @@ TOOL_HANDLERS = {
     "get_convergence_map": tool_convergence_map,
     "get_active_session": tool_get_active_session,
     "get_metrics": tool_get_metrics,
-    "get_t_agent_rate": tool_reset_agent_rate,
+    "reset_agent_rate": tool_reset_agent_rate,
 }
 
 
@@ -253,6 +259,10 @@ async def main():
     # Setup logging using shared utils (logs to ~/.local/state/mcp/logs/)
     log_file = setup_logging("ensemble-reasoning")
     logger.debug("server starting log_file=%s", log_file)
+
+    # Start metrics exporters if enabled
+    ensure_metrics_exporter_started()
+    ensure_prometheus_server_started()
 
     try:
         async with stdio_server() as (read_stream, write_stream):
