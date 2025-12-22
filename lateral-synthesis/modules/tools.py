@@ -272,7 +272,7 @@ async def tool_record_synthesis(args: dict) -> list[TextContent]:
         session_id=session.session_id,
         recorded=divergent_concept,
         connection_type=connection_type,
-        confidence=confidence,
+        confidence=confidence_val,
         syntheses_completed=len(session.syntheses),
         syntheses_required=len(session.divergent_concepts),
         remaining_concepts=remaining,
@@ -365,13 +365,13 @@ async def tool_reflect_on_session(args: dict) -> list[TextContent]:
     # Save to history
     save_session_to_history(session)
     
-    logger.info(f"Session {session.session_id} completed with rating {overall_rating}")
+    logger.info(f"Session {session.session_id} completed with rating {overall_rating_val}")
     
     return _ok(
         session_id=session.session_id,
         completed=True,
         completed_at=session.completed_at,
-        overall_rating=overall_rating,
+        overall_rating=overall_rating_val,
         summary={
             "origin": session.origin,
             "divergent_concepts": session.divergent_concepts,

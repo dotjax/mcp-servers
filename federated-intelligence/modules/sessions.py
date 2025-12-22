@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +17,10 @@ class Message:
 @dataclass
 class Session:
     id: str
-    messages: List[Message] = field(default_factory=list)
+    messages: list[Message] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 class SessionManager:
     def __init__(self, storage_dir: Path):
@@ -30,7 +30,7 @@ class SessionManager:
     def _get_path(self, session_id: str) -> Path:
         return self.storage_dir / f"{session_id}.json"
 
-    def create_session(self, metadata: Optional[Dict[str, Any]] = None) -> Session:
+    def create_session(self, metadata: Optional[dict[str, Any]] = None) -> Session:
         session_id = str(uuid.uuid4())
         session = Session(id=session_id, metadata=metadata or {})
         self.save_session(session)
@@ -62,6 +62,8 @@ class SessionManager:
         path = self._get_path(session.id)
         session.updated_at = datetime.now(timezone.utc).isoformat()
         try:
+            # Ensure directory exists (safety check)
+            path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, 'w') as f:
                 json.dump(asdict(session), f, indent=2)
         except Exception as e:
@@ -75,7 +77,7 @@ class SessionManager:
         session.messages.append(Message(role=role, content=content))
         self.save_session(session)
 
-    def list_sessions(self) -> List[Dict[str, Any]]:
+    def list_sessions(self) -> list[dict[str, Any]]:
         sessions = []
         for path in self.storage_dir.glob("*.json"):
             try:
