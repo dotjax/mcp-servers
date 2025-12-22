@@ -206,7 +206,7 @@ async def tool_synthesize(args: dict) -> list[TextContent]:
             f"\n[mcp] synthesis: convergence={convergence:.2f} consensus={len(consensus['consensus_thoughts'])} tensions={len(tensions)}",
             file=sys.stderr,
         )
-    models.log_session_event(session, "synthesize", {"convergence_score": score, "tensions": tensions})
+    models.log_session_event(session, "synthesize", {"convergence_score": convergence, "tensions": tensions})
 
     return _ok(**synthesis)
 

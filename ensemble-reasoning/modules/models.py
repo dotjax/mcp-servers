@@ -258,6 +258,13 @@ _agent_session_ops: dict[str, dict[str, deque]] = defaultdict(lambda: defaultdic
 # Lock to protect agent timestamps in concurrent access
 _agent_ops_lock: threading.Lock = threading.Lock()
 
+# Metrics infrastructure
+_metrics_lock: threading.Lock = threading.Lock()
+METRICS: dict[str, dict] = {
+    "counters": {},
+    "latencies": {}
+}
+
 
 def inc_counter(counter_name: str, delta: int = 1) -> None:
     """No-op counter increment."""

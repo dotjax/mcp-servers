@@ -28,7 +28,7 @@ from mcp.types import Tool, TextContent, Icon
 from utils import setup_logging
 
 # Import models and helpers from the `modules` package
-from modules.models import AGENT_LENSES
+from modules.models import AGENT_LENSES, stop_metrics_exporter, stop_prometheus_server
 
 # Tool implementations
 from modules.tools import (
@@ -276,4 +276,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-pass
