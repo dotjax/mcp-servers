@@ -9,7 +9,7 @@ import google.generativeai as genai
 
 from .models import ConsultationRequest, ConsultationResponse, ModelInfo, ProviderType, ServerConfig
 
-logger = logging.getLogger("federated_intelligence.clients")
+logger = logging.getLogger(__name__)
 
 class AIClient(ABC):
     """Abstract base class for AI providers."""

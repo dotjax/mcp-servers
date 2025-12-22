@@ -30,7 +30,7 @@ server = Server(
 # Setup Logging
 # Logs to ~/.local/state/mcp/logs/federated-intelligence-*.jsonl
 log_file = setup_logging("federated-intelligence")
-logger = logging.getLogger("federated_intelligence")
+logger = logging.getLogger(__name__)
 
 async def main():
     # Register tools

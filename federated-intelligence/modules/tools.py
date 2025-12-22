@@ -1,3 +1,4 @@
+import json
 import logging
 import asyncio
 from pathlib import Path
@@ -9,8 +10,27 @@ from .clients import ClientFactory
 from .utils import log_consultation
 from .sessions import SessionManager
 
-logger = logging.getLogger("federated_intelligence.tools")
+logger = logging.getLogger(__name__)
 session_manager = SessionManager(Path(__file__).parent.parent / "_logs" / "sessions")
+
+
+# -----------------------------------------------------------------------------
+# Response Helpers
+# -----------------------------------------------------------------------------
+
+def _ok(**payload) -> list[TextContent]:
+    """Return a success response (standardized with result wrapper)."""
+    return [TextContent(type="text", text=json.dumps({"status": "success", "result": payload}))]
+
+
+def _err(error: str, message: str | None = None, **details) -> list[TextContent]:
+    """Return an error response (standardized with details)."""
+    payload: dict = {"status": "error", "error": error}
+    if message:
+        payload["message"] = message
+    if details:
+        payload["details"] = details
+    return [TextContent(type="text", text=json.dumps(payload))]
 
 async def tool_consult_model(args: dict) -> list[TextContent]:
     """
@@ -26,7 +46,7 @@ async def tool_consult_model(args: dict) -> list[TextContent]:
     if not model:
         model = CONFIG.providers.get(provider).default_model if CONFIG.providers.get(provider) else None
         if not model:
-            return [TextContent(type="text", text=f"Error: No model specified and no default configured for {provider}")]
+            return _err("no_model", f"No model specified and no default configured for {provider}", provider=provider)
 
     try:
         # Pass the full ServerConfig object to the factory
@@ -36,7 +56,7 @@ async def tool_consult_model(args: dict) -> list[TextContent]:
         if session_id:
             session = session_manager.get_session(session_id)
             if not session:
-                return [TextContent(type="text", text=f"Error: Session {session_id} not found. Use 'create_session' to start a new session.")]
+                return _err("session_not_found", f"Session {session_id} not found. Use 'create_session' to start a new session.", session_id=session_id)
             
             # Add user message to session
             session_manager.add_message(session_id, "user", query)
@@ -71,13 +91,24 @@ async def tool_consult_model(args: dict) -> list[TextContent]:
         # Update session with response
         if session_id:
             session_manager.add_message(session_id, "assistant", response.response)
-            return [TextContent(type="text", text=f"Session ID: {session_id}\n\n{response.response}")]
+            return _ok(
+                session_id=session_id,
+                response=response.response,
+                provider=response.provider,
+                model=response.model,
+                timestamp=response.timestamp
+            )
         
-        return [TextContent(type="text", text=response.response)]
+        return _ok(
+            response=response.response,
+            provider=response.provider,
+            model=response.model,
+            timestamp=response.timestamp
+        )
         
     except Exception as e:
         logger.error(f"Consultation failed: {e}")
-        return [TextContent(type="text", text=f"Error: {str(e)}")]
+        return _err("consultation_failed", f"Consultation failed: {str(e)}", provider=provider, model=model)
 
 async def tool_consult_multiple_models(args: dict) -> list[TextContent]:
     """
@@ -103,25 +134,33 @@ async def tool_consult_multiple_models(args: dict) -> list[TextContent]:
             )
             resp = await client.consult(req)
             log_consultation(req, resp)
-            return f"### {provider}/{model}\n{resp.response}\n"
+            return {
+                "provider": provider,
+                "model": model,
+                "response": resp.response,
+                "success": True
+            }
         except Exception as e:
-            return f"### {provider}/{model}\nError: {e}\n"
+            logger.error(f"Consultation failed for {provider}/{model}: {e}")
+            return {
+                "provider": provider,
+                "model": model,
+                "error": str(e),
+                "success": False
+            }
 
     results = await asyncio.gather(*[consult_one(cfg) for cfg in models_config])
-    return [TextContent(type="text", text="\n".join(results))]
+    return _ok(results=results)
 
 async def tool_create_session(args: dict) -> list[TextContent]:
     """Create a new chat session."""
     session = session_manager.create_session(metadata=args.get("metadata"))
-    return [TextContent(type="text", text=session.id)]
+    return _ok(session_id=session.id, created_at=session.created_at)
 
 async def tool_list_sessions(args: dict) -> list[TextContent]:
     """List active sessions."""
     sessions = session_manager.list_sessions()
-    text = "Active Sessions:\n"
-    for s in sessions:
-        text += f"- {s['id']} ({s['created_at']}): {s['message_count']} msgs - {s['preview']}\n"
-    return [TextContent(type="text", text=text)]
+    return _ok(sessions=sessions, count=len(sessions))
 
 
 async def tool_list_models(args: dict) -> list[TextContent]:
@@ -133,16 +172,19 @@ async def tool_list_models(args: dict) -> list[TextContent]:
         client = ClientFactory.get_client(provider, CONFIG)
         models = await client.list_models()
         
-        text = f"Available models for {provider}:\n"
-        for m in models:
-            text += f"- {m.id}"
-            if m.description:
-                text += f" ({m.description})"
-            text += "\n"
-            
-        return [TextContent(type="text", text=text)]
+        models_list = [
+            {
+                "id": m.id,
+                "provider": m.provider,
+                "description": m.description
+            }
+            for m in models
+        ]
+        
+        return _ok(provider=provider, models=models_list, count=len(models_list))
     except Exception as e:
-        return [TextContent(type="text", text=f"Error listing models: {str(e)}")]
+        logger.error(f"Failed to list models for {provider}: {e}")
+        return _err("list_models_failed", f"Failed to list models: {str(e)}", provider=provider)
 
 async def tool_health_check(args: dict) -> list[TextContent]:
     """
@@ -155,15 +197,26 @@ async def tool_health_check(args: dict) -> list[TextContent]:
             try:
                 client = ClientFactory.get_client(p_name, CONFIG)
                 alive = await client.health_check()
-                results[p_name] = "OK" if alive else "Unreachable"
+                results[p_name] = {
+                    "status": "ok" if alive else "unreachable",
+                    "enabled": True
+                }
             except Exception as e:
-                results[p_name] = f"Error: {str(e)}"
+                logger.error(f"Health check failed for {p_name}: {e}")
+                results[p_name] = {
+                    "status": "error",
+                    "error": str(e),
+                    "enabled": True
+                }
         else:
-            results[p_name] = "Disabled"
+            results[p_name] = {
+                "status": "disabled",
+                "enabled": False
+            }
             
-    return [TextContent(type="text", text=str(results))]
+    return _ok(providers=results)
 
-TOOLS_HANDLERS = {
+TOOL_HANDLERS = {
     "consult_model": tool_consult_model,
     "consult_multiple_models": tool_consult_multiple_models,
     "create_session": tool_create_session,
@@ -289,7 +342,7 @@ def register_tools(server: Server):
 
     @server.call_tool()
     async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
-        handler = TOOLS_HANDLERS.get(name)
+        handler = TOOL_HANDLERS.get(name)
         if handler:
             return await handler(arguments)
-        return [TextContent(type="text", text="Unknown tool")]
+        return _err("unknown_tool", f"Unknown tool: {name}")

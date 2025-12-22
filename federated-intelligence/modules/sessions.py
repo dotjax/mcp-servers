@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
-logger = logging.getLogger("federated_intelligence.sessions")
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Message:

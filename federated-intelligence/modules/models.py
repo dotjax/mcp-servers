@@ -6,7 +6,7 @@ import yaml
 from pathlib import Path
 import logging
 
-logger = logging.getLogger("federated_intelligence.models")
+logger = logging.getLogger(__name__)
 
 ProviderType = Literal["ollama", "openai", "openrouter", "google"]
 
