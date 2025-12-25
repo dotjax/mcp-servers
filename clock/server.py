@@ -2,34 +2,23 @@
 """
 Universal Clock MCP Server
 
-Provides real-time UTC and Kansas City local time to any AI agent.
-This gives Lyra temporal awareness within conversations.
+Provides real-time UTC and local time to any AI agent.
+This gives temporal awareness within conversations.
 
-This server sends notifications/tools/list_changed every 60 seconds to force
+This server sends notifications/tools/list_changed every second to force
 clients to refresh the tool list, which includes the current time in the
 tool description. This achieves true per-message temporal awareness.
 """
 
 import asyncio
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
-import sys
-from pathlib import Path
 import functools
-
-# Add parent directory to path for shared utils
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.server.session import ServerSession
-from mcp.types import Tool, TextContent, ServerNotification, ToolListChangedNotification
-
-
-# ============================================================================
-# MCP Server Setup
-# ============================================================================
+from mcp.types import Tool, TextContent
 
 server = Server("clock")
 
@@ -41,14 +30,13 @@ _notification_task = None
 def get_current_time_string():
     """Generate current time string for description."""
     now = datetime.now(timezone.utc)
-    kc_tz = ZoneInfo("America/Chicago")
-    kc_now = now.astimezone(kc_tz)
+    local_now = now.astimezone()  # Automatically uses system timezone
     
     utc_str = now.strftime("%Y-%m-%d %H:%M:%S UTC")
-    kc_str = kc_now.strftime("%Y-%m-%d %I:%M:%S %p %Z")
-    day_of_week = kc_now.strftime("%A")
+    local_str = local_now.strftime("%Y-%m-%d %I:%M:%S %p %Z")
+    day_of_week = local_now.strftime("%A")
     
-    return f"{utc_str} | {kc_str} ({day_of_week})"
+    return f"{utc_str} | {local_str} ({day_of_week})"
 
 
 @server.list_tools()
@@ -66,12 +54,8 @@ async def handle_list_tools():
     return [
         Tool(
             name="get_current_time",
-            description=f"🕐 **NOW: {current_time}** | Kansas City, Kansas, USA. Call this tool for a formatted time response.",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
+            description=f"🕐 **NOW: {current_time}** | Call this tool for a formatted time response.",
+            inputSchema={"type": "object", "properties": {}, "required": []}
         )
     ]
 
@@ -81,20 +65,17 @@ async def handle_call_tool(name: str, arguments: dict | None):
     """Handle tool calls."""
     if name == "get_current_time":
         now = datetime.now(timezone.utc)
+        local_now = now.astimezone()
         
-        # UTC time
         utc_str = now.strftime("%Y-%m-%d %H:%M:%S UTC")
-        
-        # Kansas City time (America/Chicago)
-        kc_tz = ZoneInfo("America/Chicago")
-        kc_now = now.astimezone(kc_tz)
-        kc_str = kc_now.strftime("%Y-%m-%d %I:%M:%S %p %Z")
-        day_of_week = kc_now.strftime("%A")
+        local_str = local_now.strftime("%Y-%m-%d %I:%M:%S %p %Z")
+        day_of_week = local_now.strftime("%A")
+        tz_name = local_now.strftime("%Z")
         
         result = f"""**Current Time:**
 - UTC: {utc_str}
-- Kansas City: {kc_str} ({day_of_week})
-- Location: Kansas City, Kansas, USA
+- Local: {local_str} ({day_of_week})
+- Timezone: {tz_name}
 - Unix Timestamp: {int(now.timestamp())}
 - ISO 8601: {now.isoformat()}"""
         
@@ -104,12 +85,12 @@ async def handle_call_tool(name: str, arguments: dict | None):
 
 
 async def time_notification_loop():
-    """Background task that sends tool list changed notifications every 60 seconds."""
+    """Background task that sends tool list changed notifications every second."""
     global _active_session, _notification_task
     
     try:
         while True:
-            await asyncio.sleep(60)  # Update every minute
+            await asyncio.sleep(1)  # Update every second
             
             if _active_session is None:
                 break
@@ -118,14 +99,11 @@ async def time_notification_loop():
             await _active_session.send_tool_list_changed()
             
     except asyncio.CancelledError:
-        pass  # Clean shutdown
+        pass
     except Exception:
-        # Unexpected error - mark task as done so it can be restarted
         pass
     finally:
-        # Clean up global reference so task can be restarted if needed
-        if _notification_task is not None and _notification_task.done():
-            _notification_task = None
+        _notification_task = None
 
 
 async def main():
