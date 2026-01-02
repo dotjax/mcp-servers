@@ -88,7 +88,15 @@ class RandomStrategy(DivergenceStrategy):
             
             fallback = data.get("fallback_words", {})
             words = []
-            for category in ["nouns", "verbs", "adjectives", "abstract"]:
+            for category in [
+                "nouns",
+                "verbs",
+                "adjectives",
+                "abstract",
+                "phrases",
+                "numbers",
+                "equations",
+            ]:
                 words.extend(fallback.get(category, []))
             return words
         except Exception as e:
@@ -103,11 +111,17 @@ class RandomStrategy(DivergenceStrategy):
         """Generate random words (true randomness)."""
         logger.debug(f"Generating {count} random divergent concepts for origin: {origin[:20]}...")
         
-        # Use wonderwords if available
+        # Use wonderwords if available, but occasionally sample from concepts.json
+        # so we can emit phrases/numbers/equations too.
         if self._rw:
-            concepts = []
+            concepts: list[str] = []
             word_types = ["noun", "verb", "adjective"]
             for i in range(count):
+                use_fallback = bool(self._fallback_words) and (i % 4 == 3)
+                if use_fallback:
+                    concepts.append(random.choice(self._fallback_words))
+                    continue
+
                 word_type = word_types[i % len(word_types)]
                 try:
                     if word_type == "noun":
