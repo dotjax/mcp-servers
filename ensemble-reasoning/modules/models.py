@@ -23,6 +23,7 @@ logger = logging.getLogger("ensemble_reasoning.models")
 # Runtime-configurable server settings (can be tuned via environment variables)
 @dataclass
 class ServerConfig:
+    logging_enabled: bool = False
     max_thoughts_per_session: int = 1000
     max_endorsements_per_thought: int = 100
     default_synthesis_threshold: float = 0.6
@@ -95,6 +96,7 @@ def load_config(config_path: Path | None = None) -> ServerConfig:
             logger.warning("Failed to load config.yaml; using defaults", exc_info=True)
 
     # Environment overrides
+    cfg.logging_enabled = _env_bool("MCP_LOGGING_ENABLED", cfg.logging_enabled)
     cfg.max_thoughts_per_session = _env_int("MCP_MAX_THOUGHTS_PER_SESSION", cfg.max_thoughts_per_session)
     cfg.max_endorsements_per_thought = _env_int("MCP_MAX_ENDORSEMENTS_PER_THOUGHT", cfg.max_endorsements_per_thought)
     cfg.default_synthesis_threshold = _env_float("MCP_DEFAULT_SYNTHESIS_THRESHOLD", cfg.default_synthesis_threshold)

@@ -52,6 +52,7 @@ class LimitsConfig:
 
 @dataclass
 class Config:
+    logging_enabled: bool = False
     divergence: DivergenceConfig = field(default_factory=DivergenceConfig)
     persistence: PersistenceConfig = field(default_factory=PersistenceConfig)
     limits: LimitsConfig = field(default_factory=LimitsConfig)
@@ -75,8 +76,9 @@ def load_config(config_path: Path | None = None) -> Config:
                 cfg.persistence = PersistenceConfig(**data["persistence"])
             if "limits" in data:
                 cfg.limits = LimitsConfig(**data["limits"])
-            
-            logger.info(f"Loaded config from {config_path}")
+
+            if "logging_enabled" in data:
+                cfg.logging_enabled = bool(data["logging_enabled"])
         except Exception as e:
             logger.warning(f"Failed to load config from {config_path}: {e}")
     
@@ -87,6 +89,9 @@ def load_config(config_path: Path | None = None) -> Config:
         cfg.divergence.count = int(env_count)
     if env_persist := os.getenv("MCP_PERSISTENCE_ENABLED"):
         cfg.persistence.enabled = env_persist.lower() in ("true", "1", "yes")
+
+    if env_logging := os.getenv("MCP_LOGGING_ENABLED"):
+        cfg.logging_enabled = env_logging.lower() in ("true", "1", "yes")
     
     return cfg
 

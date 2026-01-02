@@ -239,12 +239,14 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     """Run the MCP server."""
-    setup_logging("lateral-synthesis")
-    logger.info("Starting Lateral Synthesis MCP server")
-    
-    # Load config
+    # Load config first so we can gate logging (disabled by default)
     config = get_config()
-    logger.info(f"Config: divergence.method={config.divergence.method}, divergence.count={config.divergence.count}")
+    if config.logging_enabled:
+        setup_logging("lateral-synthesis")
+        logger.info("Starting Lateral Synthesis MCP server")
+        logger.info(f"Config: divergence.method={config.divergence.method}, divergence.count={config.divergence.count}")
+    else:
+        logging.disable(logging.CRITICAL)
     
     async with stdio_server() as (read_stream, write_stream):
         await server.run(

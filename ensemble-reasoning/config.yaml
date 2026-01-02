@@ -1,4 +1,5 @@
 # Ensemble Reasoning MCP Server configuration
+logging_enabled: false
 max_thoughts_per_session: 1000
 max_endorsements_per_thought: 100
 default_synthesis_threshold: 0.6

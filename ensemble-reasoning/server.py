@@ -30,6 +30,7 @@ from utils import setup_logging
 # Import models and helpers from the `modules` package
 from modules.models import (
     AGENT_LENSES,
+    CONFIG,
     stop_metrics_exporter,
     stop_prometheus_server,
     ensure_metrics_exporter_started,
@@ -256,9 +257,12 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     """Run the MCP server"""
-    # Setup logging using shared utils (logs to ~/.local/state/mcp/logs/)
-    log_file = setup_logging("ensemble-reasoning")
-    logger.debug("server starting log_file=%s", log_file)
+    # Logging is disabled by default; enable via config.yaml (logging_enabled: true)
+    if CONFIG.logging_enabled:
+        log_file = setup_logging("ensemble-reasoning")
+        logger.debug("server starting log_file=%s", log_file)
+    else:
+        logging.disable(logging.CRITICAL)
 
     # Start metrics exporters if enabled
     ensure_metrics_exporter_started()

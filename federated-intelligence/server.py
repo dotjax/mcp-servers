@@ -12,6 +12,7 @@ from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import Icon
 from modules.tools import register_tools
+from modules.models import CONFIG
 from utils import setup_logging
 
 # Initialize Server
@@ -27,16 +28,18 @@ server = Server(
     icons=[_server_icon],
 )
 
-# Setup Logging
-# Logs to ~/.local/state/mcp/logs/federated-intelligence-*.jsonl
-log_file = setup_logging("federated-intelligence")
 logger = logging.getLogger(__name__)
 
 async def main():
+    # Logging is disabled by default; enable via config.yaml (logging_enabled: true)
+    if CONFIG.logging_enabled:
+        setup_logging("federated-intelligence")
+        logger.info("Starting Federated Intelligence MCP Server...")
+    else:
+        logging.disable(logging.CRITICAL)
+
     # Register tools
     register_tools(server)
-    
-    logger.info("Starting Federated Intelligence MCP Server...")
     
     async with stdio_server() as (read_stream, write_stream):
         await server.run(

@@ -19,6 +19,7 @@ class ProviderConfig:
 
 @dataclass
 class ServerConfig:
+    logging_enabled: bool = False
     defaults: dict[str, Any] = field(default_factory=dict)
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
 
@@ -35,6 +36,10 @@ def load_config(config_path: Path | None = None) -> ServerConfig:
             logger.warning(f"Failed to load config.yaml: {e}")
 
     # Parse into dataclasses
+    logging_enabled = bool(raw_config.get("logging_enabled", False))
+    if os.getenv("MCP_LOGGING_ENABLED") is not None:
+        logging_enabled = os.getenv("MCP_LOGGING_ENABLED").lower() in ("true", "1", "yes")
+
     defaults = raw_config.get("defaults", {})
     providers_data = raw_config.get("providers", {})
     
@@ -65,7 +70,7 @@ def load_config(config_path: Path | None = None) -> ServerConfig:
             api_key=api_key
         )
 
-    return ServerConfig(defaults=defaults, providers=providers)
+    return ServerConfig(logging_enabled=logging_enabled, defaults=defaults, providers=providers)
 
 # Global config
 CONFIG = load_config()

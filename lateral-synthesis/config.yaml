@@ -1,3 +1,5 @@
+logging_enabled: false
+
 divergence:
   method: random
   count: 5                # Number of divergent concepts to generate
